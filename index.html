@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-  <html>
-    <head>
-      <title>Meine erste Webseite</title>
-    </head>
-    <body>
-      <header>
-        <h1>Das soll mal irgendwann eine Internetseite werden</h1>
-        <p>aber diese ist noch in richtigen Kinderschuhen</p>
-      </header>    
-    </body>
-  </html>
+<html>
+<head>
+    <title>Meine erste HTML-Seite</title>
+</head>
+<body>
+    <h1>Willkommen auf meiner Webseite!</h1>
+    <p>Das ist ein einfacher Absatz.</p>
+    <p>Hier ist ein <a href="https://www.google.com">Link</a> zu Google.</p>
+    <img src="bild.jpg" alt="Ein Bild" width="200" height="200">
+</body>
+</html>
