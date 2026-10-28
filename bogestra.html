@@ -79,6 +79,8 @@
     width: 100%; font: inherit; font-size: .9rem; font-weight: 400; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical;
   }
   .fields input[type="text"] { width: 100%; }
+  .fields .hint { font-size: .78rem; color: var(--muted); }
+  .fields .hint button { margin-left: 6px; padding: 3px 8px; border: 1px solid var(--line); background: #fff; border-radius: 6px; font: inherit; font-size: .78rem; cursor: pointer; }
   .seg-label { color: var(--blue-dark) !important; font-weight: 700; }
   /* Kompakte Vorschau der Notizen bei nicht gewählten Haltestellen */
   .peek { margin: 4px 0 0 38px; font-size: .8rem; color: var(--muted); }
@@ -255,7 +257,7 @@
 const ACTIVE_LINE = "390";   // Startkonfiguration
 const parseStops = (jsonId, prefix) => JSON.parse(document.getElementById(jsonId).textContent).map((s, i) => ({
   id: prefix + String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
-  name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
+  name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng, dLat: s.lat, dLng: s.lng, fixed: false,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
   standzeit: s.standzeit || "",
   fahrerNotiz: s.fahrerNotiz || "",
   isKurzlaeufer: s.isKurzlaeufer === true
@@ -279,12 +281,24 @@ let dir = "hin";
 try { if (localStorage.getItem("bogestra-dir") === "rueck") dir = "rueck"; } catch (e) {}
 let selectedId = null;
 let mapView = null;
-let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text} }
+let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text}, pos: {id: {lat,lng}} }
 
 /* ---------- Persistenz ---------- */
 function loadUser() {
-  try { return Object.assign({ standzeit: {}, fahrerNotiz: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
-  catch (e) { return { standzeit: {}, fahrerNotiz: {} }; }
+  try { return Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
+  catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {} }; }
+}
+// Von Hand korrigierte Markerpositionen anwenden (aus dem Browser-Speicher)
+const allStops = () => [...line.dirs.hin.stops, ...line.dirs.rueck.stops];
+allStops().forEach(st => { const q = user.pos && user.pos[st.id]; if (q) { st.lat = st.oLat = q.lat; st.lng = st.oLng = q.lng; st.fixed = true; } });
+function moveStop(st, lat, lng) {
+  st.lat = st.oLat = lat; st.lng = st.oLng = lng; st.fixed = true;
+  user.pos[st.id] = { lat, lng }; saveUser(); refresh(false);
+}
+function resetStop(id) {
+  const st = allStops().find(x => x.id === id); if (!st) return;
+  st.lat = st.oLat = st.dLat; st.lng = st.oLng = st.dLng; st.fixed = false;
+  delete user.pos[id]; saveUser(); refresh(false);
 }
 function saveUser() { try { localStorage.setItem(STORE_KEY, JSON.stringify(user)); } catch (e) {} }
 
@@ -320,11 +334,14 @@ function renderList() {
         <label>Fahrer-Notiz
           <textarea rows="2" data-f="fahrerNotiz" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
         </label>
+        <div class="hint">📍 Marker falsch? Den Marker dieser Haltestelle auf der Karte an die richtige Stelle ziehen.
+          ${s.fixed ? '<button type="button" data-reset="1">Position zurücksetzen</button>' : ""}</div>
       </div>`;
     li.addEventListener("click", () => select(s.id, { fromList: true }));
     ol.appendChild(li);
   });
 
+  ol.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); resetStop(b.closest(".stop").dataset.id); }));
   // Eingaben speichern
   ol.querySelectorAll("[data-f]").forEach(el => {
     const id = el.closest(".stop").dataset.id, f = el.dataset.f;
@@ -444,9 +461,10 @@ function LeafletView() {
       const pts = stops.map(s => [s.lat, s.lng]);
       L.polyline(routePts(stops), { color: "#00539f", weight: 5, opacity: .9 }).addTo(layer);
       stops.forEach((s, i) => {
-        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name })
+        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name, draggable: s.id === sel })
           .bindPopup(popup(s, i)).addTo(layer);
         m.on("click", () => select(s.id));
+        m.on("dragend", () => { const ll = m.getLatLng(); moveStop(s, ll.lat, ll.lng); });
         byId[s.id] = m;
         if (hasStand(s)) {
           L.marker([s.lat, s.lng], {
@@ -460,7 +478,7 @@ function LeafletView() {
     },
     select(id, opts) {
       const m = byId[id]; if (!m) return;
-      order.forEach((s, i) => { if (byId[s.id]) byId[s.id].setIcon(icon(i + 1, s.id === id)).setZIndexOffset(s.id === id ? 1000 : 0); });
+      order.forEach((s, i) => { const mk = byId[s.id]; if (!mk) return; mk.setIcon(icon(i + 1, s.id === id)).setZIndexOffset(s.id === id ? 1000 : 0); s.id === id ? mk.dragging.enable() : mk.dragging.disable(); });
       m.openPopup();
       map.panTo(m.getLatLng());
     },
@@ -552,7 +570,7 @@ const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  return "bogestra-route-v1:" + stops.length + ":" + h;
+  return "bogestra-route-v2:" + stops.length + ":" + h;
 };
 const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
 const setRouteStatus = t => { const e = document.getElementById("routeStatus"); if (e) e.textContent = t; };
@@ -569,10 +587,17 @@ async function ensureRoute(stops) {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
     try {
       const coords = stops.map(s => s.oLng + "," + s.oLat).join(";");
-      const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson&continue_straight=true", { signal: ctl.signal });
-      const j = await r.json();
-      if (!r.ok || j.code !== "Ok") throw new Error(j.code || r.status);
-      data = { geo: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]), wps: j.waypoints.map(w => [w.location[1], w.location[0]]) };
+      // Erst mit "Bushaltestellen-Logik" (Ankunft auf der Fahrbahnseite in Fahrtrichtung), sonst ohne
+      let j = null;
+      for (const extra of ["&approaches=" + stops.map(() => "curb").join(";"), ""]) {
+        const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson&continue_straight=true" + extra, { signal: ctl.signal });
+        j = await r.json();
+        if (r.ok && j.code === "Ok") break;
+      }
+      if (!j || j.code !== "Ok") throw new Error(j && j.code);
+      data = { geo: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+               wps: j.waypoints.map(w => [w.location[1], w.location[0]]),
+               legs: j.routes[0].legs.map(l => l.distance) };
       try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
     } catch (e) {
       setRouteStatus("Straßenverlauf nicht verfügbar – Luftlinie");
@@ -584,9 +609,15 @@ async function ensureRoute(stops) {
   // Haltestellen auf die Straße setzen (nur kleine Korrekturen, sonst Original behalten)
   stops.forEach((st, i) => {
     const w = data.wps[i];
-    if (w && hav({ lat: st.oLat, lng: st.oLng }, { lat: w[0], lng: w[1] }) < 80) { st.lat = w[0]; st.lng = w[1]; }
+    if (w && !st.fixed && hav({ lat: st.oLat, lng: st.oLng }, { lat: w[0], lng: w[1] }) < 50) { st.lat = w[0]; st.lng = w[1]; }
   });
-  setRouteStatus("Straßenverlauf: OpenStreetMap-Routing");
+  // Auffällige Abschnitte (Umweg/Schleife/Doppelweg) melden
+  const odd = [];
+  (data.legs || []).forEach((d, i) => {
+    const air = hav({ lat: stops[i].oLat, lng: stops[i].oLng }, { lat: stops[i + 1].oLat, lng: stops[i + 1].oLng });
+    if (d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
+  });
+  setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
   refresh(false);
 }
 
