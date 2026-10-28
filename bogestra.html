@@ -479,7 +479,7 @@ const activeDetours = () => {
   const mine = line.dirs[dir].stops, has = id => mine.some(x => x.id === id), own = [], mir = [];
   user.detours.forEach(d => {
     if (has(d.fromId)) own.push(d);
-    else if (d.both && has(mirrorId(d.fromId)) && has(mirrorId(d.toId)))
+    else if (d.both !== false && has(mirrorId(d.fromId)) && has(mirrorId(d.toId)))
       mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d });
   });
   return [...own, ...mir];
@@ -1047,7 +1047,7 @@ function syncDetourUi() {
     row.appendChild(btn);
     if (!d.mirror) {
       const lab = document.createElement("label"); lab.className = "chk"; lab.style.fontSize = ".85rem";
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!d.both;
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = d.both !== false;
       cb.addEventListener("change", () => { d.both = cb.checked; saveUser(); syncDetourUi(); refresh(false); });
       lab.append(cb, " gilt auch für die Gegenrichtung"); row.appendChild(lab);
     }
