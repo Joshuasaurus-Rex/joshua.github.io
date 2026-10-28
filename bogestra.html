@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BOGESTRA Routen-Lernhilfe</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root {
     --blue: #00539f;
@@ -54,12 +55,9 @@
   .btn-export:hover { filter: brightness(1.05); }
   .btn-export:active { transform: translateY(1px); box-shadow: none; }
 
-  details.keybox { font-size: .82rem; color: var(--muted); }
-  details.keybox summary { cursor: pointer; }
-  details.keybox .row { display: flex; gap: 6px; margin-top: 6px; }
-  details.keybox input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
-  details.keybox button { padding: 6px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; font: inherit; }
-  #mapStatus { margin: 6px 0 0; }
+  .lm { width: 26px; height: 26px; border-radius: 50%; background: #FFD400; border: 2.5px solid #222; display: grid; place-items: center; font: 800 12px system-ui, sans-serif; color: #111; }
+  .lm.sel { width: 32px; height: 32px; border-width: 4px; margin: -3px 0 0 -3px; }
+  .lm-dwell { color: #d10000; font: 800 13px system-ui, sans-serif; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 3px #fff; }
 
   /* Haltestellenliste */
   .summary { padding: 8px 16px; font-size: .85rem; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
@@ -89,7 +87,7 @@
 
   /* ---------- Karte ---------- */
   main { position: relative; min-height: 0; }
-  #map { position: absolute; inset: 0; }
+  #map { position: absolute; inset: 0; z-index: 0; }
   #svgmap { position: absolute; inset: 0; width: 100%; height: 100%; background: #eaf0e4; }
   .svg-note { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
   .svg-info { position: absolute; left: 10px; top: 10px; background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
@@ -117,14 +115,6 @@
       <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
     </div>
     <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
-    <details class="keybox" id="keybox">
-      <summary>Google-Maps-API-Schlüssel</summary>
-      <div class="row">
-        <input id="apiKey" type="text" placeholder="API-Key eintragen" autocomplete="off">
-        <button type="button" id="saveKey">Laden</button>
-      </div>
-      <p id="mapStatus"></p>
-    </details>
   </div>
 
   <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
@@ -133,9 +123,9 @@
 
 <main>
   <div id="map" class="hidden"></div>
-  <svg id="svgmap" xmlns="http://www.w3.org/2000/svg"></svg>
+  <svg id="svgmap" class="hidden" xmlns="http://www.w3.org/2000/svg"></svg>
   <div class="svg-info hidden" id="svgInfo"></div>
-  <div class="svg-note" id="svgNote">Schematische Ersatzkarte – für die echte Google-Karte links unter „Google-Maps-API-Schlüssel“ einen Key eintragen.</div>
+  <div class="svg-note hidden" id="svgNote">Schematische Ersatzkarte (Kartenkacheln nicht erreichbar – offline?).</div>
 </main>
 
 <!--
@@ -191,6 +181,7 @@
 ]
 </script>
 
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const ACTIVE_LINE = "390";   // Startkonfiguration
 const line = {
@@ -210,7 +201,6 @@ const line = {
 };
 
 const STORE_KEY = "bogestra-lernhilfe-v2";
-const KEY_STORE = "bogestra-gmaps-key";
 
 let variant = "lang";
 let selectedId = null;
@@ -343,66 +333,56 @@ document.getElementById("exportBtn").addEventListener("click", () => {
 });
 
 /* =====================================================================
-   Karte 1: Google Maps
+   Karte 1: OpenStreetMap (Leaflet) – kein API-Key nötig
    ===================================================================== */
-function GoogleMapView() {
-  const map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: line.stops[0].lat, lng: line.stops[0].lng }, zoom: 13,
-    mapTypeControl: false, streetViewControl: false, fullscreenControl: true
-  });
-  const info = new google.maps.InfoWindow();
-  let markers = [], labels = [], poly = null, byId = {};
+function LeafletView() {
+  const map = L.map("map", { zoomControl: true });
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>-Mitwirkende"
+  }).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  let byId = {}, order = [];
 
-  const stopIcon = sel => ({
-    path: google.maps.SymbolPath.CIRCLE, scale: sel ? 15 : 12,
-    fillColor: "#FFD400", fillOpacity: 1, strokeColor: "#222", strokeWeight: sel ? 4 : 2.5
+  const icon = (n, sel) => L.divIcon({
+    className: "", html: `<div class="lm${sel ? " sel" : ""}">${n}</div>`,
+    iconSize: sel ? [32, 32] : [26, 26], iconAnchor: sel ? [16, 16] : [13, 13]
   });
+  const popup = (s, i) => `<div style="font-family:system-ui;max-width:220px"><b>${i + 1}. ${esc(s.name)}</b>` +
+    (hasStand(s) ? `<div style="color:#d10000;font-weight:800">${esc(dwellText(s))}</div>` : "") +
+    (getStopNote(s) ? `<div>📝 ${esc(getStopNote(s))}</div>` : "") + `</div>`;
 
   return {
     render(stops, sel, fit) {
-      markers.forEach(m => m.setMap(null)); labels.forEach(m => m.setMap(null));
-      markers = []; labels = []; byId = {};
-      if (poly) poly.setMap(null);
-      poly = new google.maps.Polyline({
-        map, path: stops.map(s => ({ lat: s.lat, lng: s.lng })),
-        strokeColor: "#00539f", strokeOpacity: .9, strokeWeight: 5
-      });
-      const bounds = new google.maps.LatLngBounds();
+      layer.clearLayers(); byId = {}; order = stops;
+      const pts = stops.map(s => [s.lat, s.lng]);
+      L.polyline(pts, { color: "#00539f", weight: 5, opacity: .9 }).addTo(layer);
       stops.forEach((s, i) => {
-        const pos = { lat: s.lat, lng: s.lng };
-        bounds.extend(pos);
-        const m = new google.maps.Marker({
-          map, position: pos, title: s.name, icon: stopIcon(s.id === sel), zIndex: s.id === sel ? 20 : 10,
-          label: { text: String(i + 1), color: "#111", fontWeight: "800", fontSize: "12px" }
-        });
-        m.addListener("click", () => select(s.id));
-        markers.push(m); byId[s.id] = m;
+        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name })
+          .bindPopup(popup(s, i)).addTo(layer);
+        m.on("click", () => select(s.id));
+        byId[s.id] = m;
         if (hasStand(s)) {
-          labels.push(new google.maps.Marker({
-            map, position: pos, clickable: false, zIndex: 30,
-            icon: { path: "M0,0", scale: 1, labelOrigin: new google.maps.Point(0, 30), strokeOpacity: 0 },
-            label: { text: dwellText(s), color: "#d10000", fontWeight: "800", fontSize: "13px" }
-          }));
+          L.marker([s.lat, s.lng], {
+            interactive: false, zIndexOffset: 500,
+            icon: L.divIcon({ className: "", html: `<div class="lm-dwell">${esc(dwellText(s))}</div>`, iconSize: [0, 0], iconAnchor: [-18, -2] })
+          }).addTo(layer);
         }
       });
-      if (fit && stops.length) map.fitBounds(bounds, 60);
+      if (fit && pts.length) map.fitBounds(pts, { padding: [40, 40] });
+      if (sel && byId[sel]) byId[sel].openPopup();
     },
-    select(id) {
-      const s = line.stops.find(x => x.id === id);
-      if (!s || !byId[id]) return;
-      Object.entries(byId).forEach(([k, m]) => { m.setIcon(stopIcon(k === id)); m.setZIndex(k === id ? 20 : 10); });
-      const stops = visibleStops(), i = stops.findIndex(x => x.id === id);
-      info.setContent(`<div style="font-family:system-ui;max-width:220px"><b>${i + 1}. ${esc(s.name)}</b>` +
-        (hasStand(s) ? `<div style="color:#d10000;font-weight:800">${esc(dwellText(s))}</div>` : "") +
-        (getStopNote(s) ? `<div>📝 ${esc(getStopNote(s))}</div>` : "") + `</div>`);
-      info.open({ map, anchor: byId[id] });
-      map.panTo({ lat: s.lat, lng: s.lng });
-    }
+    select(id, opts) {
+      const m = byId[id]; if (!m) return;
+      order.forEach((s, i) => { if (byId[s.id]) byId[s.id].setIcon(icon(i + 1, s.id === id)).setZIndexOffset(s.id === id ? 1000 : 0); });
+      m.openPopup();
+      map.panTo(m.getLatLng());
+    },
+    resize() { map.invalidateSize(); }
   };
 }
 
 /* =====================================================================
-   Karte 2: schematische SVG-Ersatzkarte (ohne API-Key lauffähig)
+   Karte 2: schematische SVG-Ersatzkarte (Fallback ohne Internet)
    ===================================================================== */
 function SvgMapView() {
   const svg = document.getElementById("svgmap");
@@ -468,48 +448,22 @@ function SvgMapView() {
 /* =====================================================================
    Karten-Start / Fallback
    ===================================================================== */
-const statusEl = document.getElementById("mapStatus");
-function useSvg(msg) {
+function useSvg() {
   document.getElementById("map").classList.add("hidden");
   document.getElementById("svgmap").classList.remove("hidden");
   document.getElementById("svgNote").classList.remove("hidden");
   mapView = SvgMapView();
-  if (msg) { statusEl.textContent = msg; document.getElementById("keybox").open = true; }
   refresh(true);
 }
-function useGoogle() {
-  document.getElementById("svgmap").classList.add("hidden");
-  document.getElementById("svgNote").classList.add("hidden");
-  document.getElementById("svgInfo").classList.add("hidden");
+function useLeaflet() {
   document.getElementById("map").classList.remove("hidden");
-  mapView = GoogleMapView();
-  statusEl.textContent = "Google Maps aktiv.";
+  mapView = LeafletView();
   refresh(true);
 }
-function loadGoogle(key) {
-  statusEl.textContent = "Lade Google Maps …";
-  window.gm_authFailure = () => useSvg("Google Maps hat den Key abgelehnt (Key, Abrechnung oder Domain-Beschränkung prüfen). Ersatzkarte aktiv.");
-  window.__gmReady = useGoogle;
-  const s = document.createElement("script");
-  s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=__gmReady`;
-  s.async = true;
-  s.onerror = () => useSvg("Google Maps konnte nicht geladen werden (offline?). Ersatzkarte aktiv.");
-  document.head.appendChild(s);
-}
-document.getElementById("saveKey").addEventListener("click", () => {
-  const key = document.getElementById("apiKey").value.trim();
-  if (!key) return;
-  try { localStorage.setItem(KEY_STORE, key); } catch (e) {}
-  location.reload();
-});
 
 /* Start */
 updateTitle();
-let savedKey = "";
-try { savedKey = localStorage.getItem(KEY_STORE) || ""; } catch (e) {}
-document.getElementById("apiKey").value = savedKey;
-useSvg();                       // sofort sichtbar
-if (savedKey) loadGoogle(savedKey);
+if (window.L) useLeaflet(); else useSvg();   // Leaflet nicht ladbar (offline) -> SVG-Ersatzkarte
 </script>
 </body>
 </html>
