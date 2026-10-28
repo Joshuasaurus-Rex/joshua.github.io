@@ -439,6 +439,36 @@ let dir = "hin";
 try { if (localStorage.getItem("bogestra-dir") === "rueck") dir = "rueck"; } catch (e) {}
 let selectedId = null;
 let mapView = null;
+/* ---------- Browser-Speicher ----------
+   Eingaben (user) haben Vorrang. Routen/Anker sind nur ein Zwischenspeicher: alte Versionen werden gelöscht, ihre Zahl begrenzt,
+   und bei vollem Speicher wird der Zwischenspeicher geleert, damit Eingaben (z. B. Umleitungen) nie verloren gehen. */
+const ROUTE_PREFIX = "bogestra-route-v6:", ANCHOR_PREFIX = "bogestra-anchor-v2:";
+function purgeCaches(all) {
+  try {
+    const kill = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (/^bogestra-(route|anchors?)-/.test(k) && (all || !(k.startsWith(ROUTE_PREFIX) || k.startsWith(ANCHOR_PREFIX)))) kill.push(k);
+    }
+    kill.forEach(k => localStorage.removeItem(k));
+  } catch (e) {}
+}
+function pruneRoutes(max) {      // nur die zuletzt berechneten Routen behalten
+  try {
+    const items = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.startsWith(ROUTE_PREFIX)) { let t = 0; try { t = JSON.parse(localStorage.getItem(k)).t || 0; } catch (e) {} items.push({ k, t }); }
+    }
+    items.sort((a, b) => b.t - a.t).slice(max).forEach(x => localStorage.removeItem(x.k));
+  } catch (e) {}
+}
+function lsSet(key, value, isUser) {
+  try { localStorage.setItem(key, value); return true; } catch (e) {}
+  purgeCaches(true);               // Speicher voll: Zwischenspeicher leeren und noch einmal versuchen
+  try { localStorage.setItem(key, value); return true; } catch (e) { return false; }
+}
+purgeCaches(false); pruneRoutes(6);
 let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text}, pos: {id: {lat,lng}} }
 
 /* ---------- Persistenz ---------- */
@@ -465,7 +495,9 @@ function resetStop(id) {
   st.lat = st.oLat = st.dLat; st.lng = st.oLng = st.dLng; st.fixed = false;
   delete user.pos[id]; saveUser(); refresh(false);
 }
-function saveUser() { try { localStorage.setItem(STORE_KEY, JSON.stringify(user)); } catch (e) {} }
+function saveUser() {
+  if (!lsSet(STORE_KEY, JSON.stringify(user))) showToast("⚠ Speicher voll – Eingaben konnten nicht gespeichert werden.", () => {}, "OK");
+}
 
 /* ---------- Abgeleitete Daten ---------- */
 const getStand = s => (s.id in user.standzeit ? user.standzeit[s.id] : s.standzeit) || "";
@@ -797,7 +829,7 @@ const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  return "bogestra-route-v5:" + stops.length + ":" + h;
+  return ROUTE_PREFIX + stops.length + ":" + h;
 };
 // Solange die Straßenroute lädt (oder nicht verfügbar ist): Luftlinie über Haltestellen und Umleitungspunkte
 const routePts = stops => routeCache[routeKey(stops)] || routePoints(stops, true).pts;
@@ -843,7 +875,7 @@ async function loadCandidates(stops) {
         const c = els.filter(e => e.tags && e.tags.name && nameMatch(e.tags.name, st.name) && hav({ lat: st.vLat, lng: st.vLng }, { lat: e.lat, lng: e.lon }) < 110)
           .map(e => ({ lat: e.lat, lng: e.lon }));
         out[st.id] = anchorMem[anchorKey(st)] = c;
-        try { localStorage.setItem(anchorKey(st), JSON.stringify(c)); } catch (e) {}
+        lsSet(anchorKey(st), JSON.stringify(c));
       });
       return out;
     } catch (e) {} finally { clearTimeout(timer); }
@@ -980,10 +1012,9 @@ async function ensureRoute(stops) {
         if (r.ok && j.code === "Ok") break;
       }
       if (!j || j.code !== "Ok") throw new Error(j && j.code);
-      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [c[1], c[0]])),
-               wps: j.waypoints.map(w => [w.location[1], w.location[0]]),
-               legs: j.routes[0].legs.map(l => l.distance) };
-      try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)])),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
+               legs: j.routes[0].legs.map(l => Math.round(l.distance)), t: Date.now() };
+      lsSet(key, JSON.stringify(data)); pruneRoutes(6);
     } catch (e) {
       setRouteStatus("Straßenverlauf nicht verfügbar – Luftlinie");
       delete routeBusy[key]; return;
@@ -1308,7 +1339,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Umleitung v4";
+const BUILD = "2026-10-28 · Speicher v5";
 function diag() {
   $("buildInfo").textContent = BUILD;
   const act = activeDetours();
