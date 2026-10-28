@@ -482,7 +482,8 @@ let mapView = null;
 /* ---------- Browser-Speicher ----------
    Eingaben (user) haben Vorrang. Routen/Anker sind nur ein Zwischenspeicher: alte Versionen werden gelöscht, ihre Zahl begrenzt,
    und bei vollem Speicher wird der Zwischenspeicher geleert, damit Eingaben (z. B. Umleitungen) nie verloren gehen. */
-const ROUTE_PREFIX = "bogestra-route-v6:", ANCHOR_PREFIX = "bogestra-anchor-v2:";
+// Version im Routen-Schlüssel erhöhen, wenn sich die Routenberechnung/-bereinigung ändert (v7: geschützte Stummel bei verschobenen Haltestellen)
+const ROUTE_PREFIX = "bogestra-route-v7:", ANCHOR_PREFIX = "bogestra-anchor-v2:";
 function purgeCaches(all) {
   try {
     const kill = [];
@@ -1412,7 +1413,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v14";
+const BUILD = "2026-10-28 · Design v15";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
