@@ -617,7 +617,7 @@ const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  return "bogestra-route-v3:" + stops.length + ":" + h;
+  return "bogestra-route-v4:" + stops.length + ":" + h;
 };
 const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
 let routeInfo = "", anchorInfo = "";
@@ -728,9 +728,10 @@ async function ensureRoute(stops) {
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
     try {
       const coords = stops.map(s => s.oLng + "," + s.oLat).join(";");
-      // Erst mit "Bushaltestellen-Logik" (Ankunft auf der Fahrbahnseite in Fahrtrichtung), sonst ohne
+      // continue_straight=false: an einer Haltestelle darf gewendet werden (sonst fährt die Route Runden um Häuserblöcke,
+      // wenn der Haltepunkt auf der „falschen“ Seite liegt). Die Wende-Spitzen werden danach von cleanSpurs entfernt.
       let j = null;
-      for (const extra of ["&approaches=" + stops.map(() => "curb").join(";"), ""]) {
+      for (const extra of ["&continue_straight=false", ""]) {
         const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
         j = await r.json();
         if (r.ok && j.code === "Ok") break;
