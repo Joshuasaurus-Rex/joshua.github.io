@@ -246,6 +246,8 @@
       <div class="pane-card">
         <h3>🛣 Strecke korrigieren (dauerhaft)</h3>
         <p>Wenn die Karte einen Abschnitt falsch führt – z. B. Einbahnstraße oder Busspur, die der Bus befahren darf, oder neu geplante Haltestellen. Die Linie läuft dann gerade durch deine Punkte, ohne Straßenrouting.</p>
+        <label class="chk" style="margin-top:8px"><input type="checkbox" id="drawSnap" checked> An Straße anpassen</label>
+        <p style="margin-top:2px">Verbindet deine Punkte über das Fußgänger-Routing: folgt dem Straßenverlauf (auch in Kurven), ignoriert Einbahnstraßen. Ohne Häkchen: gerade Linien.</p>
         <button type="button" id="directEditBtn">✏ Abschnitt einzeichnen</button>
         <div id="directList"></div>
       </div>
@@ -567,7 +569,7 @@ const activeDetours = () => {
   user.detours.forEach(d => {
     if (has(d.fromId)) own.push(d);
     else if (d.both !== false && has(mirrorId(d.fromId)) && has(mirrorId(d.toId)))
-      mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d, direct: d.direct });
+      mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d, direct: d.direct, snap: d.snap });
   });
   return [...own, ...mir];
 };
@@ -881,7 +883,7 @@ const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|")
-    + activeDetours().filter(d => d.direct).map(d => "D" + d.fromId + ">" + d.toId).join("");
+    + activeDetours().filter(d => d.direct).map(d => "D" + d.fromId + ">" + d.toId + (d.snap ? "S" : "")).join("");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
   return ROUTE_PREFIX + stops.length + ":" + h;
 };
@@ -1043,27 +1045,29 @@ function routePoints(stops, display) {
       for (let m = i + 1; m < toI; m++) items.push({ key: detourPos(d, st, stops[toI], stops[m]), c: c(stops[m]), m });
       items.sort((a, b) => a.key - b.key);
       items.forEach(it => { if (it.m != null) idx[it.m] = pts.length; pts.push(it.c); });
-      if (d.direct) ranges.push({ a: idx[i], toI });
+      if (d.direct) ranges.push({ a: idx[i], toI, snap: !!d.snap });
       i = toI - 1;
     }
   }
-  const direct = pts.map(() => false);   // direct[q]: Abschnitt q -> q+1 wird nicht über Straßen geroutet, sondern gerade gezeichnet
-  ranges.forEach(r => { for (let q = r.a; q < idx[r.toI]; q++) direct[q] = true; });
-  return { pts, idx, direct };
+  const direct = pts.map(() => false), snap = pts.map(() => false);   // direct[q]: Abschnitt q -> q+1 nicht über das Auto-Routing; snap[q]: stattdessen Fußgänger-Routing (folgt Straßen, ignoriert Einbahnstraßen)
+  ranges.forEach(r => { for (let q = r.a; q < idx[r.toI]; q++) { direct[q] = true; snap[q] = r.snap; } });
+  return { pts, idx, direct, snap };
 }
 // Ein zusammenhängender Abschnitt über den Routingdienst (Punkte als [lat, lng])
-async function routeRun(points, keep, ctl) {
+const FOOT_URL = "https://routing.openstreetmap.de/routed-foot/route/v1/driving/";   // Fußgänger-Profil: folgt Straßen/Wegen, ignoriert Einbahnstraßen für Autos
+async function routeRun(points, keep, ctl, baseUrl, clean) {
   const coords = points.map(c => c[1] + "," + c[0]).join(";");
   // continue_straight=false: an einer Haltestelle darf gewendet werden (sonst fährt die Route Runden um Häuserblöcke,
   // wenn der Haltepunkt auf der „falschen“ Seite liegt). Die Wende-Spitzen werden danach von cleanSpurs entfernt.
   let j = null;
   for (const extra of ["&continue_straight=false", ""]) {
-    const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
+    const r = await fetch((baseUrl || ROUTE_URL) + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
     j = await r.json();
     if (r.ok && j.code === "Ok") break;
   }
   if (!j || j.code !== "Ok") throw new Error(j && j.code);
-  return { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)]), keep),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
+  const g = j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)]);
+  return { geo: clean === false ? g : cleanSpurs(g, keep),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
            legs: j.routes[0].legs.map(l => Math.round(l.distance)) };
 }
 async function ensureRoute(stops) {
@@ -1080,20 +1084,29 @@ async function ensureRoute(stops) {
     try {
       const keep = [...stops.filter(s => s.fixed).map(s => [s.oLat, s.oLng]), ...stops.flatMap(s => viasAfter(s).map(v => [v.lat, v.lng]))];
       const rp = routePoints(stops), n = rp.pts.length;
-      let geo = [], legs = [];
+      let geo = [], legs = [], partial = false;
+      const rnd = c => [+c[0].toFixed(5), +c[1].toFixed(5)];
+      const add = res => {                               // Teilstück anhängen, doppelten Anschlusspunkt vermeiden
+        const g = res.geo.slice();
+        if (geo.length && g.length && Math.abs(geo[geo.length - 1][0] - g[0][0]) < 2e-5 && Math.abs(geo[geo.length - 1][1] - g[0][1]) < 2e-5) g.shift();
+        geo = geo.concat(g); legs = legs.concat(res.legs);
+      };
+      const straight = seg => ({ geo: seg.map(rnd), legs: seg.slice(1).map((c, i) => Math.round(hav({ lat: seg[i][0], lng: seg[i][1] }, { lat: c[0], lng: c[1] }))) });
       for (let q = 0; q < n - 1;) {
-        if (rp.direct[q]) {                              // Direktstrecke: gerade Linie, ohne Routing (z. B. Busspur/Einbahnstraße)
-          if (!geo.length) geo.push([+rp.pts[q][0].toFixed(5), +rp.pts[q][1].toFixed(5)]);
-          geo.push([+rp.pts[q + 1][0].toFixed(5), +rp.pts[q + 1][1].toFixed(5)]);
-          legs.push(Math.round(hav({ lat: rp.pts[q][0], lng: rp.pts[q][1] }, { lat: rp.pts[q + 1][0], lng: rp.pts[q + 1][1] }))); q++;
+        if (rp.direct[q]) {                              // Streckenkorrektur: ohne Auto-Routing
+          let r = q; while (r < n - 1 && rp.direct[r] && !!rp.snap[r] === !!rp.snap[q]) r++;
+          const seg = rp.pts.slice(q, r + 1);
+          let part = null;
+          if (rp.snap[q]) { try { part = await routeRun(seg, keep, ctl, FOOT_URL, false); } catch (e) { partial = true; } }   // an Straße anpassen; bei Fehler gerade Linie
+          add(part || straight(seg)); q = r;
         } else {
           let r = q; while (r < n - 1 && !rp.direct[r]) r++;
-          const res = await routeRun(rp.pts.slice(q, r + 1), keep, ctl);
-          geo = geo.concat(res.geo); legs = legs.concat(res.legs); q = r;
+          add(await routeRun(rp.pts.slice(q, r + 1), keep, ctl)); q = r;
         }
       }
       data = { geo, legs, t: Date.now() };
-      lsSet(key, JSON.stringify(data)); pruneRoutes(6);
+      if (!partial) { lsSet(key, JSON.stringify(data)); pruneRoutes(6); }   // unvollständige Berechnung (Fußgänger-Routing nicht erreichbar) nicht speichern, damit es beim nächsten Mal erneut versucht wird
+      else setRouteStatus("Streckenkorrektur: Fußgänger-Routing nicht erreichbar – gerade gezeichnet");
     } catch (e) {
       setRouteStatus("Straßenverlauf nicht verfügbar – Luftlinie");
       delete routeBusy[key]; return;
@@ -1111,7 +1124,7 @@ async function ensureRoute(stops) {
     const air = hav({ lat: stops[i].oLat, lng: stops[i].oLng }, { lat: stops[i + 1].oLat, lng: stops[i + 1].oLng });
     if (rp.idx[i + 1] - rp.idx[i] === 1 && !rp.direct[rp.idx[i]] && d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
   }
-  setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
+  if (!routeInfo.startsWith("Streckenkorrektur")) setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
   refresh(false);
 }
 
@@ -1141,7 +1154,7 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km"
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
 function syncDetourUi() {
-  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false;
+  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false; $("drawSnap").checked = user.drawSnap !== false;
   const eu = detourEdit && drawKind === "umleitung", ed = detourEdit && drawKind === "direkt";
   $("detourEditBtn").classList.toggle("on", eu); $("detourEditBtn").textContent = eu ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
   $("directEditBtn").classList.toggle("on", ed); $("directEditBtn").textContent = ed ? "✔ Einzeichnen beenden" : "✏ Abschnitt einzeichnen";
@@ -1169,6 +1182,12 @@ function syncDetourUi() {
         const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = d.both !== false;
         cb.addEventListener("change", () => { d.both = cb.checked; saveUser(); syncDetourUi(); refresh(false); });
         lab.append(cb, " gilt auch für die Gegenrichtung"); row.appendChild(lab);
+        if (d.direct) {
+          const l2 = document.createElement("label"); l2.className = "chk"; l2.style.fontSize = ".85rem";
+          const c2 = document.createElement("input"); c2.type = "checkbox"; c2.checked = !!d.snap;
+          c2.addEventListener("change", () => { d.snap = c2.checked; saveUser(); syncDetourUi(); refresh(false); });
+          l2.append(c2, " an Straße anpassen"); row.appendChild(l2);
+        }
       }
       box.appendChild(row);
     });
@@ -1205,7 +1224,7 @@ function detourPick(st) {            // Marker im Einzeichnen-Modus angetippt
   else if (st.id !== draft.fromId) {
     const a = vs.findIndex(x => x.id === draft.fromId), b = vs.findIndex(x => x.id === st.id);
     if (b <= a) { $("detourHint").textContent = "Das Ende muss hinter dem Start liegen (in Fahrtrichtung). Tippe eine spätere Haltestelle an."; return; }
-    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false, direct: drawKind === "direkt" };
+    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false, direct: drawKind === "direkt", snap: drawKind === "direkt" && user.drawSnap !== false };
     user.detours.push(nd);
     draft = null; detourEdit = false; if (!nd.direct) user.detour = true; saveUser();
     showToast(nd.direct ? "Streckenkorrektur gespeichert." : "Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
@@ -1234,6 +1253,7 @@ function undoDetour() {
   showToast("Nichts rückgängig zu machen. Gespeicherte Umleitungen löschst du unter Menü → Umleitung.", () => {}, "OK");
 }
 $("detourBoth").addEventListener("change", () => { user.detourBoth = $("detourBoth").checked; saveUser(); });
+$("drawSnap").addEventListener("change", () => { user.drawSnap = $("drawSnap").checked; saveUser(); });
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
 function toggleEdit(kind) {
   if (detourEdit && drawKind === kind) { detourEdit = false; draft = null; }
@@ -1457,7 +1477,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v17";
+const BUILD = "2026-10-28 · Design v18";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
