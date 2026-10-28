@@ -107,6 +107,10 @@
   #live .l-warn { color: #b35c00; font-weight: 700; font-size: .9rem; }
   #live .l-row { display: flex; gap: 8px; margin-top: 4px; }
   #live .l-row button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+  #live.alert { background: #ffe3e3; }
+  #live.alert .l-warn { color: #b00000; font-size: 1.1rem; }
+  #live .l-stats { font-size: .85rem; color: var(--muted); }
+  #live .l-opt { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
   .stop.next { box-shadow: inset 4px 0 0 var(--blue); }
   .me-dot { width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px #1a73e8, 0 0 8px rgba(0,0,0,.4); }
   .hidden { display: none !important; }
@@ -137,6 +141,7 @@
     </div>
     <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
     <button type="button" class="btn-live" id="liveBtn">📍 Live-Verfolgung starten</button>
+    <button type="button" class="btn-live hidden" id="logBtn">📄 Fahrtprotokoll (.txt)</button>
   </div>
 
   <div id="live" class="hidden" aria-live="polite">
@@ -146,6 +151,8 @@
     <div class="l-note" id="liveNote"></div>
     <div class="l-prev hidden" id="livePrev"></div>
     <div class="l-warn" id="liveWarn"></div>
+    <div class="l-stats" id="liveStats"></div>
+    <label class="l-opt"><input type="checkbox" id="alertOpt" checked> Warnung bei Abweichung mit Ton &amp; Vibration</label>
     <div class="l-row"><button type="button" id="followBtn">Karte folgt: an</button><button type="button" id="liveStop">Beenden</button></div>
   </div>
 
@@ -785,7 +792,8 @@ async function ensureRoute(stops) {
 /* =====================================================================
    Live-Verfolgung (GPS)
    ===================================================================== */
-const live = { on: false, watchId: null, pos: null, follow: true, lastSeg: 0, nextId: null, wake: null };
+const live = { on: false, watchId: null, pos: null, follow: true, lastSeg: 0, nextId: null, wake: null,
+  log: [], visited: {}, skipped: {}, off: { since: null, active: false, max: 0, start: 0 }, offCount: 0, startIdx: null, audio: null, hiddenAt: null };
 const $ = id => document.getElementById(id);
 const hav = (a, b) => {   // Meter
   const R = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r;
@@ -802,6 +810,66 @@ function segInfo(pt, a, b) {
   return { t, d: Math.hypot(px - t * bx, py - t * by) };
 }
 const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m";
+
+/* ---------- Routen-Überwachung ---------- */
+const fmtTime = t => new Date(t).toLocaleTimeString("de-DE");
+function logEvent(text) { live.log.push({ t: Date.now(), text }); $("logBtn").classList.remove("hidden"); }
+// kürzester Abstand (m) des Punktes zur Linie
+function routeDist(pos, poly) {
+  const k = Math.cos(pos.lat * Math.PI / 180), M = 111320;
+  let best = Infinity, px = 0, py = 0, ax = (poly[0][1] - pos.lng) * k * M, ay = (poly[0][0] - pos.lat) * M;
+  for (let i = 1; i < poly.length; i++) {
+    const bx = (poly[i][1] - pos.lng) * k * M, by = (poly[i][0] - pos.lat) * M;
+    const dx = bx - ax, dy = by - ay, len2 = dx * dx + dy * dy;
+    const t = len2 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / len2)) : 0;
+    const d = Math.hypot(ax + t * dx, ay + t * dy);
+    if (d < best) best = d;
+    ax = bx; ay = by;
+  }
+  return best;
+}
+function alertUser(pattern) {
+  if (!$("alertOpt").checked) return;
+  try { if (navigator.vibrate) navigator.vibrate(pattern || [300, 150, 300, 150, 300]); } catch (e) {}
+  try {
+    const ctx = live.audio; if (!ctx) return;
+    [0, .35, .7].forEach(d => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = 880; g.gain.value = .25; o.connect(g); g.connect(ctx.destination);
+      o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + .25);
+    });
+  } catch (e) {}
+}
+function monitor(stops, pos, best, nextIdx) {
+  const now = Date.now(), o = live.off;
+  if (live.startIdx == null) live.startIdx = nextIdx;
+  // 1) Abweichung von der berechneten Strecke (6 s Dauer, damit GPS-Ausreißer nicht warnen)
+  const dr = routeDist(pos, routePts(stops)), thr = Math.max(60, pos.acc * 1.5);
+  if (dr > thr) {
+    if (!o.since) { o.since = now; o.max = 0; }
+    o.max = Math.max(o.max, dr);
+    if (!o.active && now - o.since >= 6000) {
+      o.active = true; o.start = o.since; live.offCount++;
+      logEvent(`ABWEICHUNG von der Route (${Math.round(dr)} m), nächste Haltestelle: ${stops[nextIdx].name}`);
+      alertUser();
+    }
+  } else {
+    if (o.active) { logEvent(`Zurück auf der Route (max. Abweichung ${Math.round(o.max)} m, ${Math.round((now - o.start) / 1000)} s)`); alertUser([200]); }
+    o.since = null; o.active = false; o.max = 0;
+  }
+  // 2) Haltestellen erreicht / nicht erkannt
+  stops.forEach((st, i) => {
+    if (!live.visited[st.id] && hav(pos, st) < Math.max(45, pos.acc)) { live.visited[st.id] = now; logEvent(`Haltestelle erreicht: ${i + 1}. ${st.name}`); }
+  });
+  for (let i = live.startIdx; i < best.k; i++) {
+    const st = stops[i];
+    if (st && !live.visited[st.id] && !live.skipped[st.id]) { live.skipped[st.id] = now; logEvent(`Haltestelle NICHT erkannt: ${i + 1}. ${st.name}`); }
+  }
+  const reached = stops.filter(st => live.visited[st.id]).length, missed = stops.filter(st => live.skipped[st.id] && !live.visited[st.id]).length;
+  $("liveStats").textContent = `✔ ${reached}/${stops.length} Haltestellen · nicht erkannt: ${missed} · Abweichungen: ${live.offCount}`;
+  $("live").classList.toggle("alert", o.active);
+  $("liveWarn").textContent = o.active ? `⚠ ABWEICHUNG VON DER ROUTE: ${fmtDist(dr)}` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
+}
 
 function updateLive() {
   const stops = visibleStops(), pos = live.pos;
@@ -830,7 +898,7 @@ function updateLive() {
   const prev = prevIdx >= 0 ? stops[prevIdx] : null, pbox = $("livePrev");
   pbox.classList.toggle("hidden", !(prev && getStopNote(prev)));
   if (prev && getStopNote(prev)) pbox.textContent = `Nach „${prev.name}“: ${getStopNote(prev)}`;
-  $("liveWarn").textContent = best.d > 150 ? `⚠ Abseits der Route (${fmtDist(best.d)})` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
+  monitor(stops, pos, best, nextIdx);
   applyNext(true);
 }
 function applyNext(scroll) {
@@ -843,11 +911,19 @@ function applyNext(scroll) {
 async function keepAwake() {
   try { if ("wakeLock" in navigator && live.on) live.wake = await navigator.wakeLock.request("screen"); } catch (e) {}
 }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") { if (live.on) live.hiddenAt = Date.now(); return; }
+  keepAwake();
+  if (live.on && live.hiddenAt) { logEvent(`App war ${Math.round((Date.now() - live.hiddenAt) / 1000)} s nicht sichtbar – in dieser Zeit meist KEINE Standortüberwachung`); live.hiddenAt = null; }
+});
 
 function startLive() {
   if (!("geolocation" in navigator)) { alert("Dieses Gerät/dieser Browser unterstützt keine Standortabfrage."); return; }
   live.on = true; live.follow = true; live.lastSeg = 0;
+  live.log = []; live.visited = {}; live.skipped = {}; live.off = { since: null, active: false, max: 0, start: 0 }; live.offCount = 0; live.startIdx = null; live.hiddenAt = null;
+  try { live.audio = live.audio || new (window.AudioContext || window.webkitAudioContext)(); if (live.audio.resume) live.audio.resume(); } catch (e) {}
+  logEvent(`Start der Überwachung (${line.dirs[dir].label}, ${line.variants[variant].label})`);
+  $("live").classList.remove("alert"); $("liveStats").textContent = "";
   $("liveBtn").classList.add("on"); $("liveBtn").textContent = "📍 Live-Verfolgung läuft …";
   $("live").classList.remove("hidden");
   $("liveState").textContent = "Suche GPS-Signal …"; $("liveName").textContent = "";
@@ -866,6 +942,7 @@ function startLive() {
 function stopLive() {
   if (live.watchId != null) navigator.geolocation.clearWatch(live.watchId);
   try { if (live.wake) live.wake.release(); } catch (e) {}
+  logEvent("Ende der Überwachung");
   live.on = false; live.watchId = null; live.pos = null; live.wake = null; live.nextId = null;
   $("liveBtn").classList.remove("on"); $("liveBtn").textContent = "📍 Live-Verfolgung starten";
   $("live").classList.add("hidden");
@@ -874,6 +951,19 @@ function stopLive() {
 }
 $("liveBtn").addEventListener("click", () => live.on ? stopLive() : startLive());
 $("liveStop").addEventListener("click", stopLive);
+$("logBtn").addEventListener("click", () => {
+  const L = [`BOGESTRA – Fahrtprotokoll Linie ${ACTIVE_LINE} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label}`,
+    `Erstellt am: ${new Date().toLocaleString("de-DE")}`, "=".repeat(60), ""];
+  live.log.forEach(e => L.push(`${fmtTime(e.t)}  ${e.text}`));
+  const stops = visibleStops(), reached = stops.filter(st => live.visited[st.id]).length;
+  L.push("", "=".repeat(60), `Haltestellen erkannt: ${reached} von ${stops.length}`, `Abweichungen von der Route: ${live.offCount}`);
+  const blob = new Blob(["\ufeff" + L.join("\r\n") + "\r\n"], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+  a.download = `BOGESTRA_Fahrtprotokoll_${ACTIVE_LINE}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+try { $("alertOpt").checked = localStorage.getItem("bogestra-alert") !== "0"; } catch (e) {}
+$("alertOpt").addEventListener("change", () => { try { localStorage.setItem("bogestra-alert", $("alertOpt").checked ? "1" : "0"); } catch (e) {} });
 $("followBtn").addEventListener("click", () => {
   live.follow = !live.follow;
   $("followBtn").textContent = "Karte folgt: " + (live.follow ? "an" : "aus");
