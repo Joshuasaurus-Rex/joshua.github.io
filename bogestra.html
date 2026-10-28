@@ -219,6 +219,7 @@
         <h3>🚧 Umleitung / Baustelle</h3>
         <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv</label>
         <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung.</p>
+        <label class="chk" style="margin-top:10px"><input type="checkbox" id="detourBoth" checked> Neue Umleitungen auch für die Gegenrichtung übernehmen</label>
         <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
         <div class="row"><button type="button" id="viaUndo">↩ Rückgängig</button><button type="button" id="viaClear">Alle löschen</button></div>
         <div id="detourList"></div>
@@ -439,13 +440,13 @@ let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text}, po
 /* ---------- Persistenz ---------- */
 function loadUser() {
   try {
-    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
+    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
     // alte IDs „5194-0“ (Nummer-Index) -> „5194“, damit gespeicherte Notizen die Haltestelle behalten
     ["standzeit", "fahrerNotiz", "pos"].forEach(f => {
       const o = {}; Object.keys(u[f] || {}).forEach(k => { o[k.replace(/^(r?\d+)-\d+$/, "$1")] = u[f][k]; }); u[f] = o;
     });
     return u;
-  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false }; }
+  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }; }
 }
 // Von Hand korrigierte Markerpositionen anwenden (aus dem Browser-Speicher)
 const allStops = () => [...line.dirs.hin.stops, ...line.dirs.rueck.stops];
@@ -471,11 +472,23 @@ const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.
 // Zusätzlich kann jede Haltestelle einzeln als „entfällt“ markiert werden.
 let detourEdit = false, draft = null, dragId = null;   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
 const detourOn = () => !!user.detour;
+// Umleitungen, die für die aktuelle Fahrtrichtung gelten: eigene + (wenn „both“) aus der Gegenrichtung gespiegelt
+// (Start/Ende vertauscht, Punkte umgekehrt; Haltestellen-IDs der Rückrichtung haben das Präfix „r“)
+const mirrorId = id => id.startsWith("r") ? id.slice(1) : "r" + id;
+const activeDetours = () => {
+  const mine = line.dirs[dir].stops, has = id => mine.some(x => x.id === id), own = [], mir = [];
+  user.detours.forEach(d => {
+    if (has(d.fromId)) own.push(d);
+    else if (d.both && has(mirrorId(d.fromId)) && has(mirrorId(d.toId)))
+      mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d });
+  });
+  return [...own, ...mir];
+};
 // Haltestellen zwischen Start und Ende einer Umleitung (egal ob wieder eingebunden)
 const detourRange = () => {
   const ids = {}; if (!detourOn()) return ids;
   const vs = visibleStops();
-  user.detours.forEach(d => {
+  activeDetours().forEach(d => {
     const a = vs.findIndex(x => x.id === d.fromId), b = vs.findIndex(x => x.id === d.toId);
     if (a >= 0 && b > a) for (let i = a + 1; i < b; i++) ids[vs[i].id] = true;
   });
@@ -487,7 +500,7 @@ const isClosed = s => detourOn() && (!!user.closed[s.id] || !!skippedIds()[s.id]
 const routeStops = stops => { const sk = skippedIds(); return stops.filter(s => !(detourOn() && user.closed[s.id]) && !sk[s.id]); };
 const viasAfter = s => {
   if (!detourOn()) return [];
-  const out = []; user.detours.forEach(d => { if (d.fromId === s.id) out.push(...d.pts); });
+  const out = []; activeDetours().forEach(d => { if (d.fromId === s.id) out.push(...d.pts); });
   return out;
 };
 const visibleStops = () => line.dirs[dir].stops.filter(s => variant === "lang" || s.isKurzlaeufer);
@@ -593,8 +606,9 @@ function setDir(d) {
   try { localStorage.setItem("bogestra-dir", dir); } catch (e) {}
   document.getElementById("dirToggle").dataset.dir = dir;
   document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === dir)));
-  selectedId = null; live.lastSeg = 0;
+  selectedId = null; live.lastSeg = 0; draft = null;
   updateTitle();
+  syncDetourUi();
   refresh(true);
 }
 function updateTitle() {
@@ -927,7 +941,7 @@ function detourPos(d, from, to, st) {
 function routePoints(stops, display) {
   const pts = [], idx = [], c = st => display ? [st.lat, st.lng] : [st.oLat, st.oLng];
   for (let i = 0; i < stops.length; i++) {
-    const st = stops[i], d = detourOn() ? user.detours.find(x => x.fromId === st.id) : null;
+    const st = stops[i], d = detourOn() ? activeDetours().find(x => x.fromId === st.id) : null;
     const toI = d ? stops.findIndex(x => x.id === d.toId) : -1;
     idx[i] = pts.length; pts.push(c(st));
     if (d && toI > i) {
@@ -1012,7 +1026,7 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km"
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
 function syncDetourUi() {
-  $("detourOn").checked = detourOn();
+  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false;
   $("detourEditBtn").classList.toggle("on", detourEdit);
   $("detourEditBtn").textContent = detourEdit ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
   document.body.classList.toggle("editing", detourEdit);
@@ -1024,12 +1038,20 @@ function syncDetourUi() {
   $("editHint").textContent = h;
   $("editBar").classList.toggle("hidden", !detourEdit);
   const box = $("detourList"); box.innerHTML = "";
-  user.detours.filter(d => line.dirs[dir].stops.some(x => x.id === d.fromId)).forEach(d => {
-    const row = document.createElement("div");
-    row.innerHTML = `🚧 ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte) `;
+  activeDetours().forEach(d => {
+    const src = d.src || d, row = document.createElement("div");
+    row.style.margin = "6px 0";
+    row.innerHTML = `🚧 ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
     const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "löschen";
-    btn.addEventListener("click", () => { user.detours = user.detours.filter(x => x !== d); saveUser(); syncDetourUi(); refresh(false); });
-    row.appendChild(btn); box.appendChild(row);
+    btn.addEventListener("click", () => { user.detours = user.detours.filter(x => x !== src); saveUser(); syncDetourUi(); refresh(false); });
+    row.appendChild(btn);
+    if (!d.mirror) {
+      const lab = document.createElement("label"); lab.className = "chk"; lab.style.fontSize = ".85rem";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = !!d.both;
+      cb.addEventListener("change", () => { d.both = cb.checked; saveUser(); syncDetourUi(); refresh(false); });
+      lab.append(cb, " gilt auch für die Gegenrichtung"); row.appendChild(lab);
+    }
+    box.appendChild(row);
   });
 }
 // Haltestelle auf der Umleitung wieder einbinden (Antippen) bzw. entfallen lassen
@@ -1060,7 +1082,7 @@ function detourPick(st) {            // Marker im Einzeichnen-Modus angetippt
   else if (st.id !== draft.fromId) {
     const a = vs.findIndex(x => x.id === draft.fromId), b = vs.findIndex(x => x.id === st.id);
     if (b <= a) { $("detourHint").textContent = "Das Ende muss hinter dem Start liegen (in Fahrtrichtung). Tippe eine spätere Haltestelle an."; return; }
-    user.detours.push({ fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq });
+    user.detours.push({ fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false });
     draft = null; user.detour = true; saveUser();
   }
   syncDetourUi(); refresh(false);
@@ -1072,11 +1094,12 @@ function addVia(lat, lng) {
 function undoDetour() {
   if (draft) { if (draft.pts.length) draft.pts.pop(); else draft = null; }
   else {
-    const mine = user.detours.filter(d => line.dirs[dir].stops.some(x => x.id === d.fromId));
-    const last = mine.sort((x, y) => y.n - x.n)[0]; if (last) { user.detours = user.detours.filter(x => x !== last); saveUser(); }
+    const last = activeDetours().sort((x, y) => y.n - x.n)[0];
+    if (last) { const src = last.src || last; user.detours = user.detours.filter(x => x !== src); saveUser(); }
   }
   syncDetourUi(); refresh(false);
 }
+$("detourBoth").addEventListener("change", () => { user.detourBoth = $("detourBoth").checked; saveUser(); });
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
 $("detourEditBtn").addEventListener("click", () => {
   detourEdit = !detourEdit; draft = null;
@@ -1087,7 +1110,7 @@ $("editDone").addEventListener("click", () => { detourEdit = false; draft = null
 $("editUndo").addEventListener("click", () => undoDetour());
 $("viaUndo").addEventListener("click", undoDetour);
 $("viaClear").addEventListener("click", () => {
-  user.detours = user.detours.filter(d => !line.dirs[dir].stops.some(x => x.id === d.fromId)); draft = null; saveUser(); syncDetourUi(); refresh(false);
+  const gone = activeDetours().map(d => d.src || d); user.detours = user.detours.filter(d => !gone.includes(d)); draft = null; saveUser(); syncDetourUi(); refresh(false);
 });
 
 /* ---------- Routen-Überwachung ---------- */
