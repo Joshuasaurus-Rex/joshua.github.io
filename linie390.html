@@ -1265,6 +1265,7 @@ function monitor(stops, pos, best, nextIdx) {
   $("liveWarn").textContent = o.active ? `⚠ ABWEICHUNG VON DER ROUTE: ca. ${fmtDist(dr)}` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
 }
 
+const HOLD_M = 100;   // Meter hinter einer Haltestelle, bis die nächste Haltestelle angezeigt wird
 const stopNum = st => visibleStops().indexOf(st) + 1;   // gleiche Nummer wie auf der Karte, auch wenn Haltestellen entfallen
 function updateLive() {
   const stops = routeStops(visibleStops()), pos = live.pos;
@@ -1279,14 +1280,22 @@ function updateLive() {
   live.lastSeg = best.k;
   const atStart = best.k === 0 && best.t === 0;
   let nextIdx = atStart ? 0 : best.k + 1, prevIdx = atStart ? -1 : best.k;
+  // Toleranz: Die Haltestelle bleibt angezeigt, bis man sie verlassen hat (ca. 100 m dahinter) – erst dann kommt „nächste Haltestelle“.
+  // (Haltestellen sind teils verlegt/ungenau; so springt die Anzeige nicht schon an der Haltestelle weiter.)
+  let held = false;
+  if (prevIdx >= 0) {
+    const dPrev = hav(pos, stops[prevIdx]), dN = hav(pos, stops[nextIdx]);
+    if (dPrev < HOLD_M && dN > 40 && dPrev < dN) { held = true; nextIdx = prevIdx; prevIdx = prevIdx - 1; }
+  }
   const next = stops[nextIdx], dNext = hav(pos, next);
   let state = "Nächste Haltestelle";
-  if (dNext < 40) {                                   // an der Haltestelle
+  if (held) state = dNext < 40 ? "Du bist an der Haltestelle" : "Haltestelle – Abfahrt";
+  else if (dNext < 40) {                              // an der Haltestelle
     state = nextIdx === stops.length - 1 ? "Endhaltestelle erreicht" : "Du bist an der Haltestelle";
   }
   live.nextId = next.id;
   $("liveState").textContent = state;
-  $("liveDist").innerHTML = `<small>ca.</small> ${fmtDist(dNext)}`;
+  $("liveDist").innerHTML = held ? "✔" : `<small>ca.</small> ${fmtDist(dNext)}`;
   $("liveName").textContent = `${stopNum(next)}. ${next.name}`;
   $("liveStand").textContent = hasStand(next) ? "⏱ " + dwellText(next) : "";
   $("liveNote").textContent = getStopNote(next) ? "📝 " + getStopNote(next) : "";
@@ -1396,7 +1405,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v11";
+const BUILD = "2026-10-28 · Design v12";
 function diag() {
   updateBackupInfo();
   $("buildInfo").textContent = BUILD;
