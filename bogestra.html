@@ -143,6 +143,7 @@
     <div class="l-row"><button type="button" id="followBtn">Karte folgt: an</button><button type="button" id="liveStop">Beenden</button></div>
   </div>
 
+  <div class="summary" style="border-bottom:0;padding-bottom:0"><span id="routeStatus"></span></div>
   <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
   <ol id="stops"></ol>
 </aside>
@@ -219,7 +220,7 @@ const line = {
   // JSON einlesen; optionale Felder mit Defaults auffüllen
   stops: JSON.parse(document.getElementById("haltestellen-" + ACTIVE_LINE).textContent).map((s, i) => ({
     id: String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
-    name: s.name, lat: s.lat, lng: s.lng,
+    name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
     standzeit: s.standzeit || "",
     fahrerNotiz: s.fahrerNotiz || "",
     isKurzlaeufer: s.isKurzlaeufer === true
@@ -318,6 +319,7 @@ function refresh(fit = true) {
   }
   if (mapView) mapView.render(stops, selectedId, fit);
   if (live.on && live.pos) updateLive();
+  ensureRoute(stops);
 }
 
 /* ---------- Toggle ---------- */
@@ -383,7 +385,7 @@ function LeafletView() {
     render(stops, sel, fit) {
       layer.clearLayers(); byId = {}; order = stops;
       const pts = stops.map(s => [s.lat, s.lng]);
-      L.polyline(pts, { color: "#00539f", weight: 5, opacity: .9 }).addTo(layer);
+      L.polyline(routePts(stops), { color: "#00539f", weight: 5, opacity: .9 }).addTo(layer);
       stops.forEach((s, i) => {
         const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name })
           .bindPopup(popup(s, i)).addTo(layer);
@@ -481,6 +483,54 @@ function SvgMapView() {
     render(stops, s) { current = stops; sel = s; draw(); info(); },
     select(id) { sel = id; draw(); info(); }
   };
+}
+
+/* =====================================================================
+   Straßenverlauf (Routing über OSRM / OpenStreetMap-Daten)
+   Die Route folgt den Straßen; die Haltestellen werden auf die Straße gesnappt.
+   Ergebnis wird im Browser zwischengespeichert. Ohne Internet: Luftlinie.
+   ===================================================================== */
+const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
+const routeCache = {}, routeBusy = {};
+const routeKey = stops => {
+  const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng).join("|");
+  let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  return "bogestra-route-v1:" + stops.length + ":" + h;
+};
+const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
+const setRouteStatus = t => { const e = document.getElementById("routeStatus"); if (e) e.textContent = t; };
+
+async function ensureRoute(stops) {
+  const key = routeKey(stops);
+  if (routeCache[key]) return;
+  let data = null;
+  try { data = JSON.parse(localStorage.getItem(key)); } catch (e) {}
+  if (!data) {
+    if (routeBusy[key]) return;
+    routeBusy[key] = true;
+    setRouteStatus("Straßenverlauf wird geladen …");
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
+    try {
+      const coords = stops.map(s => s.oLng + "," + s.oLat).join(";");
+      const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson&continue_straight=true", { signal: ctl.signal });
+      const j = await r.json();
+      if (!r.ok || j.code !== "Ok") throw new Error(j.code || r.status);
+      data = { geo: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]), wps: j.waypoints.map(w => [w.location[1], w.location[0]]) };
+      try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
+    } catch (e) {
+      setRouteStatus("Straßenverlauf nicht verfügbar – Luftlinie");
+      delete routeBusy[key]; return;
+    } finally { clearTimeout(timer); }
+    delete routeBusy[key];
+  }
+  routeCache[key] = data.geo;
+  // Haltestellen auf die Straße setzen (nur kleine Korrekturen, sonst Original behalten)
+  stops.forEach((st, i) => {
+    const w = data.wps[i];
+    if (w && hav({ lat: st.oLat, lng: st.oLng }, { lat: w[0], lng: w[1] }) < 80) { st.lat = w[0]; st.lng = w[1]; }
+  });
+  setRouteStatus("Straßenverlauf: OpenStreetMap-Routing");
+  refresh(false);
 }
 
 /* =====================================================================
