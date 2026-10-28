@@ -92,6 +92,21 @@
   .svg-note { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
   .svg-info { position: absolute; left: 10px; top: 10px; background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
   .svg-info .st { color: var(--red); font-weight: 800; }
+  .btn-live { border: 2px solid var(--blue); background: #fff; color: var(--blue); border-radius: 12px; padding: 11px 14px; font: inherit; font-weight: 800; cursor: pointer; }
+  .btn-live.on { background: var(--blue); color: #fff; }
+  #live { padding: 10px 16px; border-bottom: 1px solid var(--line); background: #eef5ff; display: grid; gap: 4px; }
+  #live .l-top { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
+  #live #liveState { text-transform: uppercase; letter-spacing: .04em; }
+  #live .l-dist { font-weight: 800; color: var(--blue-dark); }
+  #live .l-name { font-size: 1.25rem; font-weight: 800; }
+  #live .l-stand { color: var(--red); font-weight: 800; font-size: 1.1rem; }
+  #live .l-note { font-size: 1rem; }
+  #live .l-prev { font-size: .95rem; background: #fff4c2; border-radius: 6px; padding: 6px 8px; }
+  #live .l-warn { color: #b35c00; font-weight: 700; font-size: .9rem; }
+  #live .l-row { display: flex; gap: 8px; margin-top: 4px; }
+  #live .l-row button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+  .stop.next { box-shadow: inset 4px 0 0 var(--blue); }
+  .me-dot { width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px #1a73e8, 0 0 8px rgba(0,0,0,.4); }
   .hidden { display: none !important; }
 
   @media (max-width: 760px) {
@@ -115,6 +130,17 @@
       <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
     </div>
     <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
+    <button type="button" class="btn-live" id="liveBtn">📍 Live-Verfolgung starten</button>
+  </div>
+
+  <div id="live" class="hidden" aria-live="polite">
+    <div class="l-top"><span id="liveState">Nächste Haltestelle</span><span class="l-dist" id="liveDist"></span></div>
+    <div class="l-name" id="liveName"></div>
+    <div class="l-stand" id="liveStand"></div>
+    <div class="l-note" id="liveNote"></div>
+    <div class="l-prev hidden" id="livePrev"></div>
+    <div class="l-warn" id="liveWarn"></div>
+    <div class="l-row"><button type="button" id="followBtn">Karte folgt: an</button><button type="button" id="liveStop">Beenden</button></div>
   </div>
 
   <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
@@ -262,6 +288,7 @@ function renderList() {
     });
   });
   updateSummary();
+  applyNext();
 }
 
 function updateSummary() {
@@ -290,6 +317,7 @@ function refresh(fit = true) {
     if (el) el.focus();
   }
   if (mapView) mapView.render(stops, selectedId, fit);
+  if (live.on && live.pos) updateLive();
 }
 
 /* ---------- Toggle ---------- */
@@ -341,7 +369,7 @@ function LeafletView() {
     maxZoom: 19, attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>-Mitwirkende"
   }).addTo(map);
   const layer = L.layerGroup().addTo(map);
-  let byId = {}, order = [];
+  let byId = {}, order = [], me = null;
 
   const icon = (n, sel) => L.divIcon({
     className: "", html: `<div class="lm${sel ? " sel" : ""}">${n}</div>`,
@@ -377,7 +405,16 @@ function LeafletView() {
       m.openPopup();
       map.panTo(m.getLatLng());
     },
-    resize() { map.invalidateSize(); }
+    resize() { map.invalidateSize(); },
+    setPosition(lat, lng, acc, follow) {
+      if (!me) {
+        me = { dot: L.marker([lat, lng], { icon: L.divIcon({ className: "", html: '<div class="me-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] }), interactive: false, zIndexOffset: 2000 }).addTo(map),
+               acc: L.circle([lat, lng], { radius: acc, color: "#1a73e8", weight: 1, fillOpacity: .1, interactive: false }).addTo(map) };
+      } else { me.dot.setLatLng([lat, lng]); me.acc.setLatLng([lat, lng]).setRadius(acc); }
+      if (follow) map.setView([lat, lng], Math.max(map.getZoom(), 16), { animate: true });
+    },
+    clearPosition() { if (me) { me.dot.remove(); me.acc.remove(); me = null; } },
+    onUserDrag(cb) { map.on("dragstart", cb); }
   };
 }
 
@@ -440,10 +477,109 @@ function SvgMapView() {
   }
   window.addEventListener("resize", () => { if (current.length) draw(); });
   return {
+    setPosition() {}, clearPosition() {}, onUserDrag() {},
     render(stops, s) { current = stops; sel = s; draw(); info(); },
     select(id) { sel = id; draw(); info(); }
   };
 }
+
+/* =====================================================================
+   Live-Verfolgung (GPS)
+   ===================================================================== */
+const live = { on: false, watchId: null, pos: null, follow: true, lastSeg: 0, nextId: null, wake: null };
+const $ = id => document.getElementById(id);
+const hav = (a, b) => {   // Meter
+  const R = 6371000, r = Math.PI / 180, dLa = (b.lat - a.lat) * r, dLo = (b.lng - a.lng) * r;
+  const h = Math.sin(dLa / 2) ** 2 + Math.cos(a.lat * r) * Math.cos(b.lat * r) * Math.sin(dLo / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+};
+// Lage des Punktes zum Streckenabschnitt a->b: Abstand (m) und Position t (0..1)
+function segInfo(pt, a, b) {
+  const k = Math.cos(pt.lat * Math.PI / 180), m = 111320;
+  const px = (pt.lng - a.lng) * k * m, py = (pt.lat - a.lat) * m;
+  const bx = (b.lng - a.lng) * k * m, by = (b.lat - a.lat) * m;
+  const len2 = bx * bx + by * by;
+  const t = len2 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
+  return { t, d: Math.hypot(px - t * bx, py - t * by) };
+}
+const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m";
+
+function updateLive() {
+  const stops = visibleStops(), pos = live.pos;
+  if (!pos || stops.length < 2) return;
+  // nächstgelegener Streckenabschnitt (Rückwärtssprünge leicht bestraft)
+  let best = null;
+  for (let k = 0; k < stops.length - 1; k++) {
+    const si = segInfo(pos, stops[k], stops[k + 1]);
+    const cost = si.d + (k < live.lastSeg ? 60 : 0);
+    if (!best || cost < best.cost) best = { k, ...si, cost };
+  }
+  live.lastSeg = best.k;
+  const atStart = best.k === 0 && best.t === 0;
+  let nextIdx = atStart ? 0 : best.k + 1, prevIdx = atStart ? -1 : best.k;
+  const next = stops[nextIdx], dNext = hav(pos, next);
+  let state = "Nächste Haltestelle";
+  if (dNext < 40) {                                   // an der Haltestelle
+    state = nextIdx === stops.length - 1 ? "Endhaltestelle erreicht" : "Du bist an der Haltestelle";
+  }
+  live.nextId = next.id;
+  $("liveState").textContent = state;
+  $("liveDist").textContent = fmtDist(dNext);
+  $("liveName").textContent = `${nextIdx + 1}. ${next.name}`;
+  $("liveStand").textContent = hasStand(next) ? "⏱ " + dwellText(next) : "";
+  $("liveNote").textContent = getStopNote(next) ? "📝 " + getStopNote(next) : "";
+  const prev = prevIdx >= 0 ? stops[prevIdx] : null, pbox = $("livePrev");
+  pbox.classList.toggle("hidden", !(prev && getStopNote(prev)));
+  if (prev && getStopNote(prev)) pbox.textContent = `Nach „${prev.name}“: ${getStopNote(prev)}`;
+  $("liveWarn").textContent = best.d > 150 ? `⚠ Abseits der Route (${fmtDist(best.d)})` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
+  applyNext(true);
+}
+function applyNext(scroll) {
+  document.querySelectorAll("#stops .stop").forEach(li => li.classList.toggle("next", live.on && li.dataset.id === live.nextId));
+  if (scroll && live.on) {
+    const li = document.querySelector(`#stops .stop[data-id="${live.nextId}"]`);
+    if (li) li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }
+}
+async function keepAwake() {
+  try { if ("wakeLock" in navigator && live.on) live.wake = await navigator.wakeLock.request("screen"); } catch (e) {}
+}
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") keepAwake(); });
+
+function startLive() {
+  if (!("geolocation" in navigator)) { alert("Dieses Gerät/dieser Browser unterstützt keine Standortabfrage."); return; }
+  live.on = true; live.follow = true; live.lastSeg = 0;
+  $("liveBtn").classList.add("on"); $("liveBtn").textContent = "📍 Live-Verfolgung läuft …";
+  $("live").classList.remove("hidden");
+  $("liveState").textContent = "Suche GPS-Signal …"; $("liveName").textContent = "";
+  $("liveDist").textContent = ""; $("liveStand").textContent = ""; $("liveNote").textContent = ""; $("liveWarn").textContent = "";
+  $("livePrev").classList.add("hidden"); $("followBtn").textContent = "Karte folgt: an";
+  keepAwake();
+  live.watchId = navigator.geolocation.watchPosition(p => {
+    live.pos = { lat: p.coords.latitude, lng: p.coords.longitude, acc: p.coords.accuracy || 0 };
+    if (mapView) mapView.setPosition(live.pos.lat, live.pos.lng, live.pos.acc, live.follow);
+    updateLive();
+  }, err => {
+    $("liveState").textContent = "Kein Standort";
+    $("liveWarn").textContent = err.code === 1 ? "Standortzugriff verweigert – im Browser erlauben (Schloss-Symbol in der Adressleiste)." : "GPS-Signal nicht verfügbar.";
+  }, { enableHighAccuracy: true, maximumAge: 2000, timeout: 20000 });
+}
+function stopLive() {
+  if (live.watchId != null) navigator.geolocation.clearWatch(live.watchId);
+  try { if (live.wake) live.wake.release(); } catch (e) {}
+  live.on = false; live.watchId = null; live.pos = null; live.wake = null; live.nextId = null;
+  $("liveBtn").classList.remove("on"); $("liveBtn").textContent = "📍 Live-Verfolgung starten";
+  $("live").classList.add("hidden");
+  if (mapView) mapView.clearPosition();
+  applyNext();
+}
+$("liveBtn").addEventListener("click", () => live.on ? stopLive() : startLive());
+$("liveStop").addEventListener("click", stopLive);
+$("followBtn").addEventListener("click", () => {
+  live.follow = !live.follow;
+  $("followBtn").textContent = "Karte folgt: " + (live.follow ? "an" : "aus");
+  if (live.follow && live.pos && mapView) mapView.setPosition(live.pos.lat, live.pos.lng, live.pos.acc, true);
+});
 
 /* =====================================================================
    Karten-Start / Fallback
@@ -458,6 +594,7 @@ function useSvg() {
 function useLeaflet() {
   document.getElementById("map").classList.remove("hidden");
   mapView = LeafletView();
+  mapView.onUserDrag(() => { live.follow = false; $("followBtn").textContent = "Karte folgt: aus"; });
   refresh(true);
 }
 
