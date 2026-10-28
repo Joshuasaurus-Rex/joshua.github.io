@@ -239,6 +239,10 @@
     <div class="pad">
       <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
       <button type="button" class="act" id="changeLine">🔀 Linie / Richtung / Variante ändern</button>
+      <div class="pane-card">
+        <p style="margin:0 0 8px;font-size:.85rem"><b>Version:</b> <span id="buildInfo"></span><br><span id="diagInfo" style="color:var(--muted)"></span></p>
+        <button type="button" class="act" id="hardReload" style="margin-top:0">🔄 Neueste Version laden</button>
+      </div>
       <div class="pane-card"><p style="margin:0;color:var(--muted);font-size:.85rem">Eingaben (Notizen, Standzeiten, Umleitungen, verschobene Marker) werden nur in diesem Browser gespeichert.<br>Karte © OpenStreetMap-Mitwirkende · Haltestellen: Fahrplan 390 und VRR-Stammdaten.</p></div>
     </div>
   </section>
@@ -1056,11 +1060,11 @@ function syncDetourUi() {
 }
 // Haltestelle auf der Umleitung wieder einbinden (Antippen) bzw. entfallen lassen
 let toastTimer = null;
-function showToast(text, undo) {
+function showToast(text, undo, label) {
   let t = document.getElementById("toast");
   if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.appendChild(t); }
   t.innerHTML = ""; t.append(text + " ");
-  const b = document.createElement("button"); b.type = "button"; b.textContent = "Rückgängig";
+  const b = document.createElement("button"); b.type = "button"; b.textContent = label || "Rückgängig";
   b.addEventListener("click", () => { t.classList.add("hidden"); undo(); });
   t.appendChild(b); t.classList.remove("hidden");
   clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 7000);
@@ -1303,7 +1307,23 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-function openSheet(tab) { $("sheet").classList.remove("hidden"); setTab(tab || "stops"); }
+const BUILD = "2026-10-28 · Gegenrichtung-Umleitung v3";
+function diag() {
+  $("buildInfo").textContent = BUILD;
+  const act = activeDetours();
+  $("diagInfo").textContent = `Gespeichert: ${user.detours.length} Umleitung(en) · Umleitung ${detourOn() ? "aktiv" : "AUS"} · in dieser Fahrtrichtung (${line.dirs[dir].label}): ${act.length}` +
+    (act.length ? " (" + act.map(d => `${stopById(d.fromId).name.replace(/^(Bochum|Herne) /, "")} → ${stopById(d.toId).name.replace(/^(Bochum|Herne) /, "")}${d.mirror ? " [gespiegelt]" : ""}`).join("; ") + ")" : "") +
+    ` · Variante: ${line.variants[variant].label}`;
+}
+const reloadFresh = () => { location.href = location.pathname + "?v=" + Date.now(); };
+$("hardReload").addEventListener("click", reloadFresh);
+// Prüft beim Start, ob eine neuere Version online ist (Browser zeigt sonst gern eine zwischengespeicherte alte Seite)
+fetch(location.pathname + "?check=" + Date.now(), { cache: "no-store" }).then(r => r.text()).then(t => {
+  const m = t.match(/const BUILD = "([^"]+)"/);
+  if (m && m[1] !== BUILD) showToast("Neue Version verfügbar.", reloadFresh, "Jetzt laden");
+}).catch(() => {});
+function openSheet(tab) {
+  diag(); $("sheet").classList.remove("hidden"); setTab(tab || "stops"); }
 function closeSheet() { $("sheet").classList.add("hidden"); mapResize(); }
 function setTab(t) {
   document.querySelectorAll("#sheet .tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
