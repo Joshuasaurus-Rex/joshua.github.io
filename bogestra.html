@@ -107,6 +107,8 @@
   #live .l-warn { color: #b35c00; font-weight: 700; font-size: .9rem; }
   #live .l-row { display: flex; gap: 8px; margin-top: 4px; }
   #live .l-row button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 10px; z-index: 3000; font-size: .9rem; max-width: 92vw; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+  #toast button { margin-left: 8px; background: var(--yellow); border: 0; border-radius: 6px; padding: 5px 10px; font: inherit; font-weight: 700; cursor: pointer; }
   .lm.dstart { box-shadow: 0 0 0 4px #ff9800; }
   .lm.dinc { box-shadow: 0 0 0 3px #ff9800; }
   details.detour #detourList { margin-top: 6px; }
@@ -368,6 +370,7 @@ function loadUser() {
 const allStops = () => [...line.dirs.hin.stops, ...line.dirs.rueck.stops];
 allStops().forEach(st => { const q = user.pos && user.pos[st.id]; if (q) { st.lat = st.oLat = q.lat; st.lng = st.oLng = q.lng; st.fixed = true; } });
 function moveStop(st, lat, lng) {
+  dragId = null;
   st.lat = st.oLat = lat; st.lng = st.oLng = lng; st.fixed = true;
   user.pos[st.id] = { lat, lng }; saveUser(); refresh(false);
 }
@@ -385,7 +388,7 @@ const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Sum
 const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
 // Umleitung: von Haltestelle A (fromId) über eingezeichnete Punkte zu Haltestelle B (toId); Haltestellen dazwischen entfallen.
 // Zusätzlich kann jede Haltestelle einzeln als „entfällt“ markiert werden.
-let detourEdit = false, draft = null;   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
+let detourEdit = false, draft = null, dragId = null;   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
 const detourOn = () => !!user.detour;
 // Haltestellen zwischen Start und Ende einer Umleitung (egal ob wieder eingebunden)
 const detourRange = () => {
@@ -434,7 +437,8 @@ function renderList() {
           <textarea rows="2" data-f="fahrerNotiz" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
         </label>
         <label class="chk"><input type="checkbox" data-closed="1" ${user.closed[s.id] || skippedIds()[s.id] ? "checked" : ""}> 🚧 Haltestelle entfällt (bei aktiver Umleitung)</label>
-        <div class="hint">📍 Marker falsch? Den Marker dieser Haltestelle auf der Karte an die richtige Stelle ziehen.
+        <div class="hint">📍 Marker falsch?
+          <button type="button" data-move="1">${dragId === s.id ? "Jetzt den Marker ziehen …" : "Marker verschieben"}</button>
           ${s.fixed ? '<button type="button" data-reset="1">Position zurücksetzen</button>' : ""}</div>
       </div>`;
     li.addEventListener("click", () => { if (!detourEdit && skippedIds()[s.id]) includeStop(s.id); else select(s.id, { fromList: true }); });
@@ -445,6 +449,7 @@ function renderList() {
     c.addEventListener("click", e => e.stopPropagation());
     c.addEventListener("change", () => setStopClosed(c.closest(".stop").dataset.id, c.checked));
   });
+  ol.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const id = b.closest(".stop").dataset.id; dragId = dragId === id ? null : id; refresh(false); }));
   ol.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); resetStop(b.closest(".stop").dataset.id); }));
   // Eingaben speichern
   ol.querySelectorAll("[data-f]").forEach(el => {
@@ -578,7 +583,7 @@ function LeafletView() {
         }
       }
       stops.forEach((s, i) => {
-        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel, isClosed(s), extraCls(s)), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name, draggable: s.id === sel })
+        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel, isClosed(s), extraCls(s)), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name, draggable: s.id === dragId })
           .bindPopup(popup(s, i)).addTo(layer);
         m.on("click", () => { if (detourEdit) detourPick(s); else if (skippedIds()[s.id]) includeStop(s.id); else select(s.id); });
         m.on("dragend", () => { const ll = m.getLatLng(); moveStop(s, ll.lat, ll.lng); });
@@ -595,7 +600,7 @@ function LeafletView() {
     },
     select(id, opts) {
       const m = byId[id]; if (!m) return;
-      order.forEach((s, i) => { const mk = byId[s.id]; if (!mk) return; mk.setIcon(icon(i + 1, s.id === id, isClosed(s), extraCls(s))).setZIndexOffset(s.id === id ? 1000 : 0); s.id === id ? mk.dragging.enable() : mk.dragging.disable(); });
+      order.forEach((s, i) => { const mk = byId[s.id]; if (!mk) return; mk.setIcon(icon(i + 1, s.id === id, isClosed(s), extraCls(s))).setZIndexOffset(s.id === id ? 1000 : 0); s.id === dragId ? mk.dragging.enable() : mk.dragging.disable(); });
       m.openPopup();
       map.panTo(m.getLatLng());
     },
@@ -939,7 +944,21 @@ function syncDetourUi() {
   });
 }
 // Haltestelle auf der Umleitung wieder einbinden (Antippen) bzw. entfallen lassen
-function includeStop(id) { user.included[id] = true; saveUser(); selectedId = id; refresh(false); }
+let toastTimer = null;
+function showToast(text, undo) {
+  let t = document.getElementById("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; document.body.appendChild(t); }
+  t.innerHTML = ""; t.append(text + " ");
+  const b = document.createElement("button"); b.type = "button"; b.textContent = "Rückgängig";
+  b.addEventListener("click", () => { t.classList.add("hidden"); undo(); });
+  t.appendChild(b); t.classList.remove("hidden");
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.add("hidden"), 7000);
+}
+function includeStop(id) {
+  user.included[id] = true; saveUser(); selectedId = id; refresh(false);
+  const st = stopById(id);
+  showToast(`„${st.name}“ wieder eingebunden.`, () => { delete user.included[id]; saveUser(); refresh(false); });
+}
 function setStopClosed(id, closed) {
   const inRange = !!detourRange()[id];
   if (closed) { if (inRange) delete user.included[id]; else { user.closed[id] = true; user.detour = true; } }
