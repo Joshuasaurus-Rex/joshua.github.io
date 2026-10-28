@@ -146,21 +146,48 @@
     standzeit      z. B. "5 Min"  -> wird am Marker in ROT angezeigt
     fahrerNotiz    z. B. "Nach der Ampel rechts am Lidl" -> Info-Fenster
     isKurzlaeufer  true = Haltestelle ist auch Teil der Kurzläufer-Route
-  ACHTUNG: Koordinaten sind echte VRR-Haltestellenpositionen (Bochum/Herne), die
-  REIHENFOLGE/Zuordnung zur Linie 390 sowie Standzeiten und Notizen sind DUMMY-Werte.
+  QUELLE: Linienband/Fahrplan 390 (Bochum Linden Mitte -> Herne Bf, Richtung Herne), Koordinaten
+  aus den VRR-Haltestellen-Stammdaten (STOP_NR). Standzeiten und Fahrer-Notizen stehen nicht im
+  Fahrplan und sind leer – in der App (Liste links) oder hier im JSON eintragen.
+  ANNAHME Kurzläufer: Fahrten, die ab Bochum Birkenfeldstr. starten (z. B. 4.36 / 5.06 Uhr, Mo-Fr).
+  Anpassen über isKurzlaeufer.
 -->
 <script type="application/json" id="haltestellen-390">
 [
-  { "stopNr": 5194, "name": "Bochum Hbf",                  "lat": 51.47947, "lng": 7.22334, "standzeit": "5 Min", "fahrerNotiz": "Abfahrt Bussteig 3",                                 "isKurzlaeufer": true  },
-  { "stopNr": 5127, "name": "Bochum Rathaus",              "lat": 51.48188, "lng": 7.21602,                         "fahrerNotiz": "",                                                    "isKurzlaeufer": true  },
-  { "stopNr": 5408, "name": "Bochum Präsident Bf",         "lat": 51.48795, "lng": 7.21029,                         "fahrerNotiz": "Nach der Haltestelle an der 2. Ampel links",           "isKurzlaeufer": true  },
-  { "stopNr": 5132, "name": "Bochum Riemke Markt",         "lat": 51.50924, "lng": 7.21124, "standzeit": "3 Min", "fahrerNotiz": "Am Lidl rechts abbiegen",                             "isKurzlaeufer": true  },
-  { "stopNr": 5718, "name": "Herne Eickeler Markt",        "lat": 51.51477, "lng": 7.18002,                                                                                                "isKurzlaeufer": true  },
-  { "stopNr": 5715, "name": "Herne Dorstener Str",         "lat": 51.53073, "lng": 7.18636, "standzeit": "8 Min", "fahrerNotiz": "Wendeschleife – Kurzläufer endet hier",              "isKurzlaeufer": true  },
-  { "stopNr": 7568, "name": "Herne Westring",              "lat": 51.53445, "lng": 7.21995,                         "fahrerNotiz": "Enge Kurve, Gegenverkehr beachten",                   "isKurzlaeufer": false },
-  { "stopNr": 5003, "name": "Herne Rathaus",               "lat": 51.53872, "lng": 7.21950,                                                                                                "isKurzlaeufer": false },
-  { "stopNr": 7501, "name": "Herne Bf",                    "lat": 51.54436, "lng": 7.21681,                                                                                                "isKurzlaeufer": false },
-  { "stopNr": 7510, "name": "Herne Akademie Mont-Cenis",   "lat": 51.53918, "lng": 7.25810, "standzeit": "10 Min", "fahrerNotiz": "Endhaltestelle Langläufer",                          "isKurzlaeufer": false }
+  { "stopNr": 5290, "name": "Bochum Linden Mitte", "lat": 51.42627, "lng": 7.16112, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5596, "name": "Bochum Halfmannswiese", "lat": 51.43227, "lng": 7.16092, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 6749, "name": "Bochum Am Sattelgut", "lat": 51.43343, "lng": 7.16227, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5260, "name": "Bochum Scharpenseelstr.", "lat": 51.44065, "lng": 7.15823, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5228, "name": "Bochum Zollstr.", "lat": 51.44442, "lng": 7.16035, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5027, "name": "Bochum Elchweg", "lat": 51.45059, "lng": 7.14753, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5115, "name": "Bochum Mattenburg", "lat": 51.4565, "lng": 7.15362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5504, "name": "Bochum Höntrop", "lat": 51.46027, "lng": 7.15463, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5366, "name": "Bochum Höntrop Kirche", "lat": 51.46405, "lng": 7.15199, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5882, "name": "Bochum Ridderstr.", "lat": 51.46862, "lng": 7.14553, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5114, "name": "Bochum Lohackerstr.", "lat": 51.4718, "lng": 7.14497, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5264, "name": "Bochum August-Bebel-Platz", "lat": 51.48062, "lng": 7.13877, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5168, "name": "Bochum Freiheitstr.", "lat": 51.48255, "lng": 7.13489, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5823, "name": "Bochum Hüller Str.", "lat": 51.48938, "lng": 7.13857, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5267, "name": "Bochum Birkenfeldstr.", "lat": 51.49614, "lng": 7.13862, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5202, "name": "Bochum Ulrichstr.", "lat": 51.49485, "lng": 7.14605, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5487, "name": "Bochum Röhlinghauser Str.", "lat": 51.5037, "lng": 7.15844, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7615, "name": "Herne Röhlinghausen Kirche", "lat": 51.5128, "lng": 7.15254, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 6784, "name": "Herne Röhlinghausen Markt", "lat": 51.51308, "lng": 7.15475, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5737, "name": "Herne Königsgruber Str.", "lat": 51.51251, "lng": 7.16088, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5717, "name": "Herne Eickeler Bruch", "lat": 51.51166, "lng": 7.16514, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5713, "name": "Herne Dahlhauser Str.", "lat": 51.50782, "lng": 7.16902, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5720, "name": "Herne Eickel Ev. Krankenhaus", "lat": 51.51146, "lng": 7.17694, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5705, "name": "Herne Auf der Wenge", "lat": 51.51317, "lng": 7.17895, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5718, "name": "Herne Eickeler Markt", "lat": 51.51477, "lng": 7.18002, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7584, "name": "Herne Dorneburger Str.", "lat": 51.52226, "lng": 7.18043, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5715, "name": "Herne Dorstener Str.", "lat": 51.53073, "lng": 7.18636, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5751, "name": "Herne Zeche Julia", "lat": 51.53747, "lng": 7.19118, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5710, "name": "Herne Buschkampstr.", "lat": 51.53866, "lng": 7.19981, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5726, "name": "Herne An der Ziegelei", "lat": 51.53726, "lng": 7.20346, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5210, "name": "Herne Gertrudenplatz", "lat": 51.53842, "lng": 7.21362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5003, "name": "Herne Rathaus", "lat": 51.53872, "lng": 7.2195, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7502, "name": "Herne Mitte", "lat": 51.54071, "lng": 7.22098, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7501, "name": "Herne Bf", "lat": 51.54436, "lng": 7.21681, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  }
 ]
 </script>
 
