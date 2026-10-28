@@ -240,6 +240,15 @@
       <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
       <button type="button" class="act" id="changeLine">🔀 Linie / Richtung / Variante ändern</button>
       <div class="pane-card">
+        <h3>💾 Sicherung</h3>
+        <p style="margin:0 0 4px;font-size:.85rem;color:var(--muted)">Speichert Notizen, Standzeiten, Umleitungen, verschobene Marker und Einstellungen als Datei – falls der Browser seine Daten einmal löscht oder du das Handy wechselst.</p>
+        <button type="button" class="act" id="backupBtn">💾 Sicherung speichern</button>
+        <button type="button" class="act hidden" id="shareBtn">📤 Sicherung teilen …</button>
+        <button type="button" class="act" id="restoreBtn">📂 Sicherung wiederherstellen</button>
+        <input type="file" id="restoreFile" accept=".json,application/json" class="hidden">
+        <p id="backupInfo" style="margin:8px 0 0;font-size:.82rem;color:var(--muted)"></p>
+      </div>
+      <div class="pane-card">
         <p style="margin:0 0 8px;font-size:.85rem"><b>Version:</b> <span id="buildInfo"></span><br><span id="diagInfo" style="color:var(--muted)"></span></p>
         <button type="button" class="act" id="hardReload" style="margin-top:0">🔄 Neueste Version laden</button>
       </div>
@@ -1339,14 +1348,56 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Speicher v5";
+const BUILD = "2026-10-28 · Sicherung v6";
 function diag() {
+  updateBackupInfo();
   $("buildInfo").textContent = BUILD;
   const act = activeDetours();
   $("diagInfo").textContent = `Gespeichert: ${user.detours.length} Umleitung(en) · Umleitung ${detourOn() ? "aktiv" : "AUS"} · in dieser Fahrtrichtung (${line.dirs[dir].label}): ${act.length}` +
     (act.length ? " (" + act.map(d => `${stopById(d.fromId).name.replace(/^(Bochum|Herne) /, "")} → ${stopById(d.toId).name.replace(/^(Bochum|Herne) /, "")}${d.mirror ? " [gespiegelt]" : ""}`).join("; ") + ")" : "") +
     ` · Variante: ${line.variants[variant].label}`;
 }
+/* ---------- Sicherung ---------- */
+const PREF_KEYS = ["bogestra-variant", "bogestra-dir", "bogestra-alert"];
+function buildBackup() {
+  const prefs = {};
+  PREF_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) prefs[k] = v; } catch (e) {} });
+  return { app: "bogestra-lernhilfe", version: 2, exported: new Date().toISOString(), user, prefs };
+}
+const backupName = () => "BOGESTRA_Sicherung_" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".json";
+function updateBackupInfo() {
+  let t = ""; try { t = localStorage.getItem("bogestra-lastbackup") || ""; } catch (e) {}
+  $("backupInfo").textContent = t ? "Letzte Sicherung: " + new Date(t).toLocaleString("de-DE") : "Noch keine Sicherung erstellt.";
+}
+function noteBackupDone() { try { localStorage.setItem("bogestra-lastbackup", new Date().toISOString()); } catch (e) {} updateBackupInfo(); }
+$("backupBtn").addEventListener("click", () => {
+  const blob = new Blob([JSON.stringify(buildBackup(), null, 1)], { type: "application/json" });
+  const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = backupName();
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  noteBackupDone(); showToast("Sicherung gespeichert (Ordner „Downloads“).", () => {}, "OK");
+});
+try {   // Teilen-Knopf nur, wenn der Browser Dateien teilen kann (Handy)
+  if (navigator.canShare && navigator.canShare({ files: [new File(["{}"], "x.json", { type: "application/json" })] })) $("shareBtn").classList.remove("hidden");
+} catch (e) {}
+$("shareBtn").addEventListener("click", async () => {
+  try {
+    const file = new File([JSON.stringify(buildBackup(), null, 1)], backupName(), { type: "application/json" });
+    await navigator.share({ files: [file], title: "BOGESTRA Sicherung" }); noteBackupDone();
+  } catch (e) {}
+});
+$("restoreBtn").addEventListener("click", () => $("restoreFile").click());
+$("restoreFile").addEventListener("change", async () => {
+  const f = $("restoreFile").files[0]; $("restoreFile").value = ""; if (!f) return;
+  let obj; try { obj = JSON.parse(await f.text()); } catch (e) { alert("Die Datei konnte nicht gelesen werden."); return; }
+  if (!obj || obj.app !== "bogestra-lernhilfe" || typeof obj.user !== "object" || !obj.user) { alert("Das ist keine BOGESTRA-Sicherung."); return; }
+  if (!confirm("Die aktuellen Eingaben (Notizen, Standzeiten, Umleitungen, Marker) werden durch die Sicherung ersetzt. Fortfahren?")) return;
+  const clean = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }, obj.user);
+  ["standzeit", "fahrerNotiz", "pos", "closed", "included"].forEach(k => { if (!clean[k] || typeof clean[k] !== "object" || Array.isArray(clean[k])) clean[k] = {}; });
+  if (!Array.isArray(clean.detours)) clean.detours = [];
+  if (!lsSet(STORE_KEY, JSON.stringify(clean))) { alert("Speicher voll – Sicherung konnte nicht wiederhergestellt werden."); return; }
+  Object.keys(obj.prefs || {}).forEach(k => { if (PREF_KEYS.includes(k)) { try { localStorage.setItem(k, String(obj.prefs[k])); } catch (e) {} } });
+  location.reload();
+});
 const reloadFresh = () => { location.href = location.pathname + "?v=" + Date.now(); };
 $("hardReload").addEventListener("click", reloadFresh);
 // Prüft beim Start, ob eine neuere Version online ist (Browser zeigt sonst gern eine zwischengespeicherte alte Seite)
