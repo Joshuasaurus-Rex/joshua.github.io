@@ -257,7 +257,7 @@
 const ACTIVE_LINE = "390";   // Startkonfiguration
 const parseStops = (jsonId, prefix) => JSON.parse(document.getElementById(jsonId).textContent).map((s, i) => ({
   id: prefix + String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
-  name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng, dLat: s.lat, dLng: s.lng, fixed: false,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
+  name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng, dLat: s.lat, dLng: s.lng, vLat: s.lat, vLng: s.lng, fixed: false,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
   standzeit: s.standzeit || "",
   fahrerNotiz: s.fahrerNotiz || "",
   isKurzlaeufer: s.isKurzlaeufer === true
@@ -573,7 +573,75 @@ const routeKey = stops => {
   return "bogestra-route-v3:" + stops.length + ":" + h;
 };
 const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
-const setRouteStatus = t => { const e = document.getElementById("routeStatus"); if (e) e.textContent = t; };
+let routeInfo = "", anchorInfo = "";
+const showStatus = () => { const e = document.getElementById("routeStatus"); if (e) e.textContent = [routeInfo, anchorInfo].filter(Boolean).join(" · "); };
+const setRouteStatus = t => { routeInfo = t; showStatus(); };
+
+/* ---------------------------------------------------------------------
+   Haltestellen-Anker: echte Bushaltestellen aus OpenStreetMap (Overpass)
+   Die VRR-Koordinate ist nur ein Mittelpunkt. Wir suchen in der Nähe die OSM-Haltestelle mit
+   gleichem Namen und nehmen – bei mehreren – die auf der rechten Fahrbahnseite in Fahrtrichtung.
+   --------------------------------------------------------------------- */
+const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+const normName = n => String(n).toLowerCase().replace(/^(bochum|herne|wattenscheid)\s+/, "").replace(/str\./g, "straße")
+  .replace(/straße/g, "strasse").replace(/ß/g, "ss").replace(/[^a-zäöü0-9]/g, "");
+const nameMatch = (a, b) => { a = normName(a); b = normName(b); return a.length > 1 && (a === b || (a.length > 3 && b.length > 3 && (a.includes(b) || b.includes(a)))); };
+const anchorPromises = {}, anchorReported = {};
+
+async function loadCandidates(stops) {
+  let h = 0; const str = stops.map(s => s.name + s.vLat + s.vLng).join("|");
+  for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
+  const key = "bogestra-anchors-v1:" + stops.length + ":" + h;
+  try { const c = JSON.parse(localStorage.getItem(key)); if (c) return c; } catch (e) {}
+  const q = "[out:json][timeout:25];(" + stops.map(s => `node(around:110,${s.vLat},${s.vLng})["highway"="bus_stop"];`).join("") + ");out body;";
+  for (const url of OVERPASS) {
+    try {
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      if (!r.ok) continue;
+      const els = (await r.json()).elements || [];
+      const out = {};
+      stops.forEach(st => {
+        out[st.id] = els.filter(e => e.tags && e.tags.name && nameMatch(e.tags.name, st.name) && hav({ lat: st.vLat, lng: st.vLng }, { lat: e.lat, lng: e.lon }) < 110)
+          .map(e => ({ lat: e.lat, lng: e.lon }));
+      });
+      try { localStorage.setItem(key, JSON.stringify(out)); } catch (e) {}
+      return out;
+    } catch (e) {}
+  }
+  return null;
+}
+// bei mehreren Kandidaten: rechte Straßenseite in Fahrtrichtung, sonst der nächste
+function chooseAnchor(stops, i, cands) {
+  if (!cands || !cands.length) return null;
+  if (cands.length === 1) return cands[0];
+  const s = stops[i], k = Math.cos(s.vLat * Math.PI / 180), M = 111320;
+  const loc = (la, ln) => [(ln - s.vLng) * k * M, (la - s.vLat) * M];
+  const a = stops[i - 1] || s, b = stops[i + 1] || s;
+  const pa = loc(a.vLat, a.vLng), pb = loc(b.vLat, b.vLng), d = [pb[0] - pa[0], pb[1] - pa[1]];
+  const withD = cands.map(c => { const v = loc(c.lat, c.lng); return { c, dist: Math.hypot(v[0], v[1]), right: d[0] * v[1] - d[1] * v[0] < 0 }; });
+  const pool = Math.hypot(d[0], d[1]) > 1 && withD.some(x => x.right) ? withD.filter(x => x.right) : withD;
+  return pool.sort((x, y) => x.dist - y.dist)[0].c;
+}
+function prepareAnchors(stops) {
+  const key = stops.map(s => s.id).join("|");
+  if (!anchorPromises[key]) anchorPromises[key] = (async () => {
+    anchorInfo = "Haltestellen-Anker werden gesucht …"; showStatus();
+    const cands = await loadCandidates(stops);
+    if (!cands) { anchorInfo = "Haltestellen-Anker nicht verfügbar"; showStatus(); return false; }
+    let n = 0, changed = false;
+    stops.forEach((st, i) => {
+      if (st.fixed) return;
+      const c = chooseAnchor(stops, i, cands[st.id]);
+      if (!c) return;
+      n++;
+      if (c.lat !== st.oLat || c.lng !== st.oLng) { st.lat = st.oLat = st.dLat = c.lat; st.lng = st.oLng = st.dLng = c.lng; changed = true; }
+    });
+    anchorInfo = `Haltestellen-Anker: ${n} von ${stops.length} gefunden`; showStatus();
+    return changed;
+  })();
+  // Positionen nur einmal als „geändert“ melden (-> einmal neu zeichnen); alle Aufrufer warten auf dasselbe Ergebnis
+  return anchorPromises[key].then(ch => { if (ch && !anchorReported[key]) { anchorReported[key] = true; return true; } return false; });
+}
 
 // Entfernt „Sackgassen“-Schleifen: Die Route fährt in eine Nebenstraße hinein und auf demselben Weg zurück
 // (entsteht, wenn eine Haltestelle auf die falsche Straße gesnappt wird). Echte Schleifen/Kreisel bleiben.
@@ -601,6 +669,7 @@ function cleanSpurs(geo) {
 }
 
 async function ensureRoute(stops) {
+  if (await prepareAnchors(stops)) { refresh(false); return; }   // Marker auf echte Haltestellen gesetzt -> neu zeichnen, danach Route
   const key = routeKey(stops);
   if (routeCache[key]) return;
   let data = null;
