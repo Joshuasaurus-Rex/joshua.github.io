@@ -684,7 +684,12 @@ const routeKey = stops => {
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
   return "bogestra-route-v4:" + stops.length + ":" + h;
 };
-const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
+// Solange die Straßenroute lädt (oder nicht verfügbar ist): Luftlinie über Haltestellen und Umleitungspunkte
+const routePts = stops => routeCache[routeKey(stops)] || (() => {
+  const pts = [];
+  stops.forEach((st, i) => { pts.push([st.lat, st.lng]); if (i < stops.length - 1) viasAfter(st).forEach(v => pts.push([v.lat, v.lng])); });
+  return pts;
+})();
 let routeInfo = "", anchorInfo = "";
 const showStatus = () => { const e = document.getElementById("routeStatus"); if (e) e.textContent = [routeInfo, anchorInfo].filter(Boolean).join(" · "); };
 const setRouteStatus = t => { routeInfo = t; showStatus(); };
@@ -700,27 +705,39 @@ const normName = n => String(n).toLowerCase().replace(/^(bochum|herne|wattensche
 const nameMatch = (a, b) => { a = normName(a); b = normName(b); return a.length > 1 && (a === b || (a.length > 3 && b.length > 3 && (a.includes(b) || b.includes(a)))); };
 const anchorPromises = {}, anchorReported = {};
 
-async function loadCandidates(stops) {
-  let h = 0; const str = stops.map(s => s.name + s.vLat + s.vLng).join("|");
+// Kandidaten je Haltestelle einzeln zwischengespeichert: ändert sich die Haltestellenliste (Variante, Umleitung),
+// werden nur wirklich fehlende Haltestellen bei OpenStreetMap abgefragt.
+const anchorMem = {};
+const anchorKey = st => {
+  const str = st.name + st.vLat + st.vLng; let h = 0;
   for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  const key = "bogestra-anchors-v1:" + stops.length + ":" + h;
-  try { const c = JSON.parse(localStorage.getItem(key)); if (c) return c; } catch (e) {}
-  const q = "[out:json][timeout:25];(" + stops.map(s => `node(around:110,${s.vLat},${s.vLng})["highway"="bus_stop"];`).join("") + ");out body;";
+  return "bogestra-anchor-v2:" + st.id + ":" + h;
+};
+async function loadCandidates(stops) {
+  const out = {}, need = [];
+  stops.forEach(st => {
+    let c = anchorMem[anchorKey(st)];
+    if (!c) { try { c = JSON.parse(localStorage.getItem(anchorKey(st))); } catch (e) {} }
+    if (c) { out[st.id] = anchorMem[anchorKey(st)] = c; } else need.push(st);
+  });
+  if (!need.length) return out;
+  const q = "[out:json][timeout:25];(" + need.map(s => `node(around:110,${s.vLat},${s.vLng})["highway"="bus_stop"];`).join("") + ");out body;";
   for (const url of OVERPASS) {
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
     try {
-      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" } });
+      const r = await fetch(url, { method: "POST", body: "data=" + encodeURIComponent(q), headers: { "Content-Type": "application/x-www-form-urlencoded" }, signal: ctl.signal });
       if (!r.ok) continue;
       const els = (await r.json()).elements || [];
-      const out = {};
-      stops.forEach(st => {
-        out[st.id] = els.filter(e => e.tags && e.tags.name && nameMatch(e.tags.name, st.name) && hav({ lat: st.vLat, lng: st.vLng }, { lat: e.lat, lng: e.lon }) < 110)
+      need.forEach(st => {
+        const c = els.filter(e => e.tags && e.tags.name && nameMatch(e.tags.name, st.name) && hav({ lat: st.vLat, lng: st.vLng }, { lat: e.lat, lng: e.lon }) < 110)
           .map(e => ({ lat: e.lat, lng: e.lon }));
+        out[st.id] = anchorMem[anchorKey(st)] = c;
+        try { localStorage.setItem(anchorKey(st), JSON.stringify(c)); } catch (e) {}
       });
-      try { localStorage.setItem(key, JSON.stringify(out)); } catch (e) {}
       return out;
-    } catch (e) {}
+    } catch (e) {} finally { clearTimeout(timer); }
   }
-  return null;
+  return Object.keys(out).length ? out : null;   // Abfrage fehlgeschlagen: nur bereits bekannte Haltestellen verwenden
 }
 // bei mehreren Kandidaten: rechte Straßenseite in Fahrtrichtung, sonst der nächste
 function chooseAnchor(stops, i, cands) {
