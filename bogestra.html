@@ -570,10 +570,35 @@ const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  return "bogestra-route-v2:" + stops.length + ":" + h;
+  return "bogestra-route-v3:" + stops.length + ":" + h;
 };
 const routePts = stops => routeCache[routeKey(stops)] || stops.map(s => [s.lat, s.lng]);
 const setRouteStatus = t => { const e = document.getElementById("routeStatus"); if (e) e.textContent = t; };
+
+// Entfernt „Sackgassen“-Schleifen: Die Route fährt in eine Nebenstraße hinein und auf demselben Weg zurück
+// (entsteht, wenn eine Haltestelle auf die falsche Straße gesnappt wird). Echte Schleifen/Kreisel bleiben.
+function cleanSpurs(geo) {
+  const k = Math.cos(geo[0][0] * Math.PI / 180), M = 111320;
+  const P = geo.map(c => [c[1] * k * M, c[0] * M]);
+  const out = [];
+  let i = 0;
+  while (i < geo.length) {
+    out.push(geo[i]);
+    let jump = -1, len = 0;
+    for (let j = i + 1; j < geo.length && j <= i + 80; j++) {
+      len += Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]);
+      if (len > 300) break;
+      if (j >= i + 3 && len > 30 && Math.hypot(P[j][0] - P[i][0], P[j][1] - P[i][1]) < 15) {
+        let a = 0;
+        for (let q = i; q < j; q++) a += P[q][0] * P[q + 1][1] - P[q + 1][0] * P[q][1];
+        a = Math.abs(a + P[j][0] * P[i][1] - P[i][0] * P[j][1]) / 2;
+        if (a < 0.02 * len * len) { jump = j; break; }
+      }
+    }
+    i = jump > 0 ? jump : i + 1;
+  }
+  return out;
+}
 
 async function ensureRoute(stops) {
   const key = routeKey(stops);
@@ -590,12 +615,12 @@ async function ensureRoute(stops) {
       // Erst mit "Bushaltestellen-Logik" (Ankunft auf der Fahrbahnseite in Fahrtrichtung), sonst ohne
       let j = null;
       for (const extra of ["&approaches=" + stops.map(() => "curb").join(";"), ""]) {
-        const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson&continue_straight=true" + extra, { signal: ctl.signal });
+        const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
         j = await r.json();
         if (r.ok && j.code === "Ok") break;
       }
       if (!j || j.code !== "Ok") throw new Error(j && j.code);
-      data = { geo: j.routes[0].geometry.coordinates.map(c => [c[1], c[0]]),
+      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [c[1], c[0]])),
                wps: j.waypoints.map(w => [w.location[1], w.location[0]]),
                legs: j.routes[0].legs.map(l => l.distance) };
       try { localStorage.setItem(key, JSON.stringify(data)); } catch (e) {}
