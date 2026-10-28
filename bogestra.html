@@ -181,7 +181,7 @@
   <div id="bottom">
     <div id="editBar" class="hidden">
       <div id="editHint"></div>
-      <div class="l-row"><button type="button" id="editUndo">↩ Rückgängig</button><button type="button" id="editDone">✔ Fertig</button></div>
+      <div class="l-row"><button type="button" id="editUndo">↩ Schritt zurück</button><button type="button" id="editDone">✔ Abbrechen</button></div>
     </div>
     <div id="live" class="hidden" aria-live="polite">
       <div class="l-top" id="liveState">Nächste Haltestelle</div>
@@ -221,8 +221,9 @@
         <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung.</p>
         <label class="chk" style="margin-top:10px"><input type="checkbox" id="detourBoth" checked> Neue Umleitungen auch für die Gegenrichtung übernehmen</label>
         <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
-        <div class="row"><button type="button" id="viaUndo">↩ Rückgängig</button><button type="button" id="viaClear">Alle löschen</button></div>
+        <div class="row"><button type="button" id="viaUndo">↩ Letzten Schritt zurück</button><button type="button" id="viaClear">Alle löschen</button></div>
         <div id="detourList"></div>
+        <button type="button" id="trashBtn" class="hidden">↩ Gelöschte Umleitungen zurückholen</button>
       </div>
       <div class="pane-card">
         <h3>So geht’s</h3>
@@ -483,13 +484,13 @@ let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text}, po
 /* ---------- Persistenz ---------- */
 function loadUser() {
   try {
-    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
+    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true, trash: [] }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
     // alte IDs „5194-0“ (Nummer-Index) -> „5194“, damit gespeicherte Notizen die Haltestelle behalten
     ["standzeit", "fahrerNotiz", "pos"].forEach(f => {
       const o = {}; Object.keys(u[f] || {}).forEach(k => { o[k.replace(/^(r?\d+)-\d+$/, "$1")] = u[f][k]; }); u[f] = o;
     });
     return u;
-  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }; }
+  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true, trash: [] }; }
 }
 // Von Hand korrigierte Markerpositionen anwenden (aus dem Browser-Speicher)
 const allStops = () => [...line.dirs.hin.stops, ...line.dirs.rueck.stops];
@@ -1080,6 +1081,7 @@ function syncDetourUi() {
   else h = `Start: ${stopById(draft.fromId).name}. Schritt 2: Tippe Punkte entlang der Umleitung, in Fahrtrichtung (${draft.pts.length} gesetzt). Schritt 3: Tippe die Haltestelle an, an der die normale Route wieder beginnt.`;
   $("detourHint").textContent = detourEdit ? h : "";
   $("editHint").textContent = h;
+  const tr = (user.trash || []).length; $("trashBtn").classList.toggle("hidden", !tr); $("trashBtn").textContent = `↩ Gelöschte Umleitungen zurückholen (${tr})`;
   $("editBar").classList.toggle("hidden", !detourEdit);
   const box = $("detourList"); box.innerHTML = "";
   activeDetours().forEach(d => {
@@ -1087,7 +1089,7 @@ function syncDetourUi() {
     row.style.margin = "6px 0";
     row.innerHTML = `🚧 ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
     const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "löschen";
-    btn.addEventListener("click", () => { user.detours = user.detours.filter(x => x !== src); saveUser(); syncDetourUi(); refresh(false); });
+    btn.addEventListener("click", () => removeDetours([src]));
     row.appendChild(btn);
     if (!d.mirror) {
       const lab = document.createElement("label"); lab.className = "chk"; lab.style.fontSize = ".85rem";
@@ -1126,8 +1128,10 @@ function detourPick(st) {            // Marker im Einzeichnen-Modus angetippt
   else if (st.id !== draft.fromId) {
     const a = vs.findIndex(x => x.id === draft.fromId), b = vs.findIndex(x => x.id === st.id);
     if (b <= a) { $("detourHint").textContent = "Das Ende muss hinter dem Start liegen (in Fahrtrichtung). Tippe eine spätere Haltestelle an."; return; }
-    user.detours.push({ fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false });
-    draft = null; user.detour = true; saveUser();
+    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false };
+    user.detours.push(nd);
+    draft = null; detourEdit = false; user.detour = true; saveUser();
+    showToast("Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
   }
   syncDetourUi(); refresh(false);
 }
@@ -1135,13 +1139,22 @@ function addVia(lat, lng) {
   if (!draft) { $("detourHint").textContent = "Zuerst die Start-Haltestelle antippen (Schritt 1)."; return; }
   draft.pts.push({ lat, lng }); syncDetourUi(); refresh(false);
 }
+// Umleitungen entfernen – nie endgültig: sie landen im „Papierkorb“ (user.trash) und lassen sich zurückholen
+function removeDetours(list, silent) {
+  list = list.filter(Boolean); if (!list.length) return;
+  user.trash = [...list.map(d => JSON.parse(JSON.stringify(d))), ...(user.trash || [])].slice(0, 10);
+  user.detours = user.detours.filter(d => !list.includes(d));
+  saveUser(); syncDetourUi(); refresh(false);
+  if (!silent) showToast(list.length > 1 ? `${list.length} Umleitungen gelöscht.` : "Umleitung gelöscht.", () => restoreTrash(list.length), "Rückgängig");
+}
+function restoreTrash(n) {
+  const back = (user.trash || []).splice(0, n || (user.trash || []).length);
+  back.forEach(d => user.detours.push(d)); user.detour = true;
+  saveUser(); syncDetourUi(); refresh(false);
+}
 function undoDetour() {
-  if (draft) { if (draft.pts.length) draft.pts.pop(); else draft = null; }
-  else {
-    const last = activeDetours().sort((x, y) => y.n - x.n)[0];
-    if (last) { const src = last.src || last; user.detours = user.detours.filter(x => x !== src); saveUser(); }
-  }
-  syncDetourUi(); refresh(false);
+  if (draft) { if (draft.pts.length) draft.pts.pop(); else draft = null; syncDetourUi(); refresh(false); return; }
+  showToast("Nichts rückgängig zu machen. Gespeicherte Umleitungen löschst du unter Menü → Umleitung.", () => {}, "OK");
 }
 $("detourBoth").addEventListener("change", () => { user.detourBoth = $("detourBoth").checked; saveUser(); });
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
@@ -1154,8 +1167,12 @@ $("editDone").addEventListener("click", () => { detourEdit = false; draft = null
 $("editUndo").addEventListener("click", () => undoDetour());
 $("viaUndo").addEventListener("click", undoDetour);
 $("viaClear").addEventListener("click", () => {
-  const gone = activeDetours().map(d => d.src || d); user.detours = user.detours.filter(d => !gone.includes(d)); draft = null; saveUser(); syncDetourUi(); refresh(false);
+  const gone = activeDetours().map(d => d.src || d); draft = null;
+  if (!gone.length) return;
+  if (!confirm(`Alle ${gone.length} Umleitung(en) dieser Fahrtrichtung löschen?`)) return;
+  removeDetours(gone);
 });
+$("trashBtn").addEventListener("click", () => restoreTrash());
 
 /* ---------- Routen-Überwachung ---------- */
 const fmtTime = t => new Date(t).toLocaleTimeString("de-DE");
@@ -1348,7 +1365,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Sicherung v6";
+const BUILD = "2026-10-28 · Sicherung v7";
 function diag() {
   updateBackupInfo();
   $("buildInfo").textContent = BUILD;
@@ -1391,7 +1408,8 @@ $("restoreFile").addEventListener("change", async () => {
   let obj; try { obj = JSON.parse(await f.text()); } catch (e) { alert("Die Datei konnte nicht gelesen werden."); return; }
   if (!obj || obj.app !== "bogestra-lernhilfe" || typeof obj.user !== "object" || !obj.user) { alert("Das ist keine BOGESTRA-Sicherung."); return; }
   if (!confirm("Die aktuellen Eingaben (Notizen, Standzeiten, Umleitungen, Marker) werden durch die Sicherung ersetzt. Fortfahren?")) return;
-  const clean = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true }, obj.user);
+  const clean = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true, trash: [] }, obj.user);
+  if (!Array.isArray(clean.trash)) clean.trash = [];
   ["standzeit", "fahrerNotiz", "pos", "closed", "included"].forEach(k => { if (!clean[k] || typeof clean[k] !== "object" || Array.isArray(clean[k])) clean[k] = {}; });
   if (!Array.isArray(clean.detours)) clean.detours = [];
   if (!lsSet(STORE_KEY, JSON.stringify(clean))) { alert("Speicher voll – Sicherung konnte nicht wiederhergestellt werden."); return; }
