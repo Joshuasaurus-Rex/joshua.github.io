@@ -71,6 +71,7 @@
   #live .l-top { font-size: .78rem; color: var(--blue); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
   #live .l-main { display: flex; align-items: center; gap: 14px; }
   #live .l-dist { font-size: 3rem; font-weight: 900; color: var(--blue-dark); line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
+  #live .l-dist small { font-size: 1.1rem; font-weight: 700; color: var(--muted); letter-spacing: 0; margin-right: 2px; }
   #live .l-name { font-size: 1.25rem; font-weight: 800; line-height: 1.15; flex: 1; min-width: 0; overflow-wrap: break-word; hyphens: auto; }
   #live .l-stand { color: var(--red); font-weight: 800; font-size: 1.25rem; }
   #live .l-note { font-size: 1.1rem; }
@@ -1095,7 +1096,8 @@ function segInfo(pt, a, b) {
   const t = len2 ? Math.max(0, Math.min(1, (px * bx + py * by) / len2)) : 0;
   return { t, d: Math.hypot(px - t * bx, py - t * by) };
 }
-const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m";
+// Entfernungen nur als Näherung („ca.“): Haltestellen wurden teils verlegt und stimmen nicht überall exakt mit der Karte überein
+const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : (m < 100 ? Math.round(m / 10) * 10 : Math.round(m / 50) * 50) + " m";
 
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
@@ -1242,11 +1244,11 @@ function monitor(stops, pos, best, nextIdx) {
     o.max = Math.max(o.max, dr);
     if (!o.active && now - o.since >= 6000) {
       o.active = true; o.start = o.since; live.offCount++;
-      logEvent(`ABWEICHUNG von der Route (${Math.round(dr)} m), nächste Haltestelle: ${stops[nextIdx].name}`);
+      logEvent(`ABWEICHUNG von der Route (ca. ${Math.round(dr / 10) * 10} m), nächste Haltestelle: ${stops[nextIdx].name}`);
       alertUser();
     }
   } else {
-    if (o.active) { logEvent(`Zurück auf der Route (max. Abweichung ${Math.round(o.max)} m, ${Math.round((now - o.start) / 1000)} s)`); alertUser([200]); }
+    if (o.active) { logEvent(`Zurück auf der Route (max. Abweichung ca. ${Math.round(o.max / 10) * 10} m, ${Math.round((now - o.start) / 1000)} s)`); alertUser([200]); }
     o.since = null; o.active = false; o.max = 0;
   }
   // 2) Haltestellen erreicht / nicht erkannt
@@ -1260,7 +1262,7 @@ function monitor(stops, pos, best, nextIdx) {
   const reached = stops.filter(st => live.visited[st.id]).length, missed = stops.filter(st => live.skipped[st.id] && !live.visited[st.id]).length;
   $("liveStats").textContent = `✔ ${reached}/${stops.length} Haltestellen · nicht erkannt: ${missed} · Abweichungen: ${live.offCount}`;
   $("live").classList.toggle("alert", o.active);
-  $("liveWarn").textContent = o.active ? `⚠ ABWEICHUNG VON DER ROUTE: ${fmtDist(dr)}` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
+  $("liveWarn").textContent = o.active ? `⚠ ABWEICHUNG VON DER ROUTE: ca. ${fmtDist(dr)}` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
 }
 
 const stopNum = st => visibleStops().indexOf(st) + 1;   // gleiche Nummer wie auf der Karte, auch wenn Haltestellen entfallen
@@ -1284,7 +1286,7 @@ function updateLive() {
   }
   live.nextId = next.id;
   $("liveState").textContent = state;
-  $("liveDist").textContent = fmtDist(dNext);
+  $("liveDist").innerHTML = `<small>ca.</small> ${fmtDist(dNext)}`;
   $("liveName").textContent = `${stopNum(next)}. ${next.name}`;
   $("liveStand").textContent = hasStand(next) ? "⏱ " + dwellText(next) : "";
   $("liveNote").textContent = getStopNote(next) ? "📝 " + getStopNote(next) : "";
@@ -1394,7 +1396,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v10";
+const BUILD = "2026-10-28 · Design v11";
 function diag() {
   updateBackupInfo();
   $("buildInfo").textContent = BUILD;
