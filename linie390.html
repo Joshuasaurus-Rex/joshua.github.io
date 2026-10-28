@@ -251,6 +251,11 @@
         <button type="button" id="directEditBtn">✏ Abschnitt einzeichnen</button>
         <div id="directList"></div>
       </div>
+      <div class="pane-card hidden" id="oddCard">
+        <h3>⚠ Auffällige Abschnitte</h3>
+        <p>Hier ist die Auto-Route deutlich länger als die Luftlinie – oft eine Einbahnstraße oder Busspur, die der Bus befahren darf. Tippe auf „Straße folgen (Bus)", dann folgt die Linie dem Straßenverlauf ohne Einbahn-Regel. Prüfe das Ergebnis auf der Karte und lösche es bei Bedarf wieder.</p>
+        <div id="oddList"></div>
+      </div>
       <div class="pane-card">
         <h3>🚧 Umleitung / Baustelle (zeitweise)</h3>
         <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv</label>
@@ -559,7 +564,7 @@ const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Sum
 const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
 // Umleitung: von Haltestelle A (fromId) über eingezeichnete Punkte zu Haltestelle B (toId); Haltestellen dazwischen entfallen.
 // Zusätzlich kann jede Haltestelle einzeln als „entfällt“ markiert werden.
-let detourEdit = false, draft = null, dragId = null, drawKind = "umleitung";   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
+let detourEdit = false, draft = null, dragId = null, drawKind = "umleitung", oddLegs = [];   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
 const detourOn = () => !!user.detour;
 // Umleitungen, die für die aktuelle Fahrtrichtung gelten: eigene + (wenn „both“) aus der Gegenrichtung gespiegelt
 // (Start/Ende vertauscht, Punkte umgekehrt; Haltestellen-IDs der Rückrichtung haben das Präfix „r“)
@@ -1117,13 +1122,16 @@ async function ensureRoute(stops) {
   // Marker auf die gezeichnete Linie setzen (nächster Linienpunkt, in Fahrtrichtung fortlaufend gesucht), damit Marker und Linie übereinstimmen
   snapToLine(stops, data.geo);
   // Auffällige Abschnitte (Umweg/Schleife/Doppelweg) melden
-  const odd = [];
+  const odd = [], sug = [];
   const rp = routePoints(stops);
   for (let i = 0; i < stops.length - 1; i++) {
     let d = 0; for (let q = rp.idx[i]; q < rp.idx[i + 1]; q++) d += (data.legs || [])[q] || 0;
     const air = hav({ lat: stops[i].oLat, lng: stops[i].oLng }, { lat: stops[i + 1].oLat, lng: stops[i + 1].oLng });
-    if (rp.idx[i + 1] - rp.idx[i] === 1 && !rp.direct[rp.idx[i]] && d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
+    const plain = rp.idx[i + 1] - rp.idx[i] === 1 && !rp.direct[rp.idx[i]];
+    if (plain && d > Math.max(2.5 * air, air + 300)) odd.push(`${stopNum(stops[i])}→${stopNum(stops[i + 1])}`);
+    if (plain && air > 60 && d > Math.max(1.5 * air, air + 120)) sug.push({ a: stops[i], b: stops[i + 1], car: Math.round(d), air: Math.round(air) });   // Vorschläge für Busspur/Einbahnstraße
   }
+  oddLegs = sug; renderOdd();
   if (!routeInfo.startsWith("Streckenkorrektur")) setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
   refresh(false);
 }
@@ -1153,6 +1161,22 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km"
 
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
+// Vorschläge: Abschnitte, bei denen die Auto-Route viel länger ist als die Luftlinie (oft Einbahnstraße/Busspur). Ein Tipp legt eine Streckenkorrektur an.
+function addCorrection(a, b) {
+  user.detours.push({ fromId: a.id, toId: b.id, pts: [], n: ++user.detourSeq, both: user.detourBoth !== false, direct: true, snap: true });
+  saveUser(); renderOdd(); syncDetourUi(); refresh(false);
+}
+function renderOdd() {
+  const card = $("oddCard"), box = $("oddList"); if (!card) return;
+  const list = oddLegs.filter(o => !activeDetours().some(d => d.direct && d.fromId === o.a.id && d.toId === o.b.id));
+  card.classList.toggle("hidden", !list.length); box.innerHTML = "";
+  list.forEach(o => {
+    const row = document.createElement("div"); row.style.margin = "6px 0";
+    row.append(`${stopNum(o.a)} ${o.a.name.replace(/^(Bochum|Herne) /, "")} → ${stopNum(o.b)} ${o.b.name.replace(/^(Bochum|Herne) /, "")} (Auto-Route ca. ${o.car} m statt Luftlinie ca. ${o.air} m) `);
+    const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "Straße folgen (Bus)";
+    btn.addEventListener("click", () => addCorrection(o.a, o.b)); row.appendChild(btn); box.appendChild(row);
+  });
+}
 function syncDetourUi() {
   $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false; $("drawSnap").checked = user.drawSnap !== false;
   const eu = detourEdit && drawKind === "umleitung", ed = detourEdit && drawKind === "direkt";
@@ -1477,7 +1501,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v18";
+const BUILD = "2026-10-28 · Design v19";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
