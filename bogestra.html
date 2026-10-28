@@ -3,21 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#18397a">
-<title>BOGESTRA Routen-Lernhilfe</title>
+<meta name="theme-color" content="#000000">
+<title>Routen-Lernhilfe Linie 390</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <style>
   :root {
-    /* BOGESTRA-Farbwelt: Marine-Blau und Himmelblau (Farbwerte aus dem BOGESTRA-Anzeigenmotiv der Fahrplan-PDF abgeleitet) */
-    --blue: #1f62b0;
-    --blue-dark: #18397a;
-    --sky: #3d90d5;
+    /* Farbwelt: Schwarz, Rot, Weiß (--sky = Akzentrot) */
+    --blue: #111111;
+    --blue-dark: #000000;
+    --sky: #d10000;
     --yellow: #ffd400;
     --red: #d10000;
     --bg: #f2f4f7;
     --card: #ffffff;
     --line: #d5dbe3;
-    --text: #1b2430;
+    --text: #111111;
     --muted: #5d6b7c;
     --safe-t: env(safe-area-inset-top, 0px);
     --safe-b: env(safe-area-inset-bottom, 0px);
@@ -27,7 +27,7 @@
   body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--blue-dark); }
   button { font-family: inherit; }
   .hidden { display: none !important; }
-  .badge { background: var(--yellow); color: #111; font-weight: 800; font-size: 1.2rem; padding: 2px 11px; border-radius: 9px; }
+  .badge { background: var(--red); color: #fff; font-weight: 800; font-size: 1.2rem; padding: 2px 11px; border-radius: 9px; }
 
   /* ---------- Vollbild-Karte ---------- */
   #app { position: fixed; inset: 0; }
@@ -45,7 +45,7 @@
   /* ---------- Kopfleiste ---------- */
   #topbar { position: absolute; z-index: 1200; top: 0; left: 0; right: 0; display: flex; gap: 8px; padding: calc(10px + var(--safe-t)) 10px 10px; pointer-events: none; }
   #topbar > * { pointer-events: auto; }
-  .chip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(24,57,122,.96); color: #fff; border: 0; border-bottom: 3px solid var(--sky); border-radius: 16px; padding: 7px 14px 7px 8px; text-align: left; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+  .chip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(17,17,17,.96); color: #fff; border: 0; border-bottom: 3px solid var(--sky); border-radius: 16px; padding: 7px 14px 7px 8px; text-align: left; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
   .chip .ct { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
   .chip .ct b { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .chip .ct small { opacity: .8; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -61,7 +61,7 @@
   .dock-btn.live { background: linear-gradient(135deg, var(--blue-dark), var(--blue)); color: #fff; flex: 1.3; }
   body.live #dock, body.editing #dock, body.editing #stopCard, body.live #stopCard, body.sheet-open #bottom { display: none; }
   #stopCard { display: flex; align-items: center; gap: 8px; background: #fff; border-radius: 22px; box-shadow: 0 6px 24px rgba(0,0,0,.4); padding: 8px; }
-  #stopCard .nav { flex: none; width: 54px; height: 60px; border: 0; border-radius: 15px; background: #e4eefa; color: var(--blue-dark); font-size: 1.5rem; font-weight: 800; cursor: pointer; }
+  #stopCard .nav { flex: none; width: 54px; height: 60px; border: 0; border-radius: 15px; background: #eeeeee; color: var(--blue-dark); font-size: 1.5rem; font-weight: 800; cursor: pointer; }
   #stopCard .sc-main { flex: 1; min-width: 0; cursor: pointer; line-height: 1.25; }
   #stopCard .sc-top { font-size: .75rem; color: var(--blue); text-transform: uppercase; letter-spacing: .05em; font-weight: 700; }
   #stopCard .sc-name { font-size: 1.15rem; font-weight: 800; overflow-wrap: break-word; }
@@ -74,7 +74,7 @@
   #live .l-name { font-size: 1.25rem; font-weight: 800; line-height: 1.15; flex: 1; min-width: 0; overflow-wrap: break-word; hyphens: auto; }
   #live .l-stand { color: var(--red); font-weight: 800; font-size: 1.25rem; }
   #live .l-note { font-size: 1.1rem; }
-  #live .l-prev { font-size: .98rem; background: #fff4c2; border-radius: 8px; padding: 7px 10px; }
+  #live .l-prev { font-size: .98rem; background: #f3f3f3; border-left: 4px solid var(--red); border-radius: 8px; padding: 7px 10px; }
   #live .l-warn { color: #b35c00; font-weight: 700; font-size: .95rem; }
   #live .l-stats { font-size: .82rem; color: var(--muted); }
   #live .l-opt { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
@@ -85,7 +85,7 @@
   #editBar { background: #fff3e0; border: 2px solid #ff9800; }
   #editHint { font-size: .95rem; }
   #toast { position: fixed; left: 50%; top: calc(80px + var(--safe-t)); transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 12px; z-index: 5000; font-size: .9rem; max-width: 92vw; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
-  #toast button { margin-left: 8px; background: var(--yellow); border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+  #toast button { margin-left: 8px; background: var(--red); color: #fff; border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
 
   /* ---------- Menü (halbes Blatt unten, Karte bleibt sichtbar) ---------- */
   #sheet { position: fixed; left: 0; right: 0; bottom: 0; height: var(--sheetH); z-index: 3000; background: var(--bg); display: flex; flex-direction: column; border-radius: 22px 22px 0 0; box-shadow: 0 -6px 24px rgba(0,0,0,.35); padding-bottom: var(--safe-b); overflow: hidden; }
@@ -112,14 +112,14 @@
   .detour-pane #detourList { margin-top: 6px; font-size: .9rem; }
   .detour-pane #detourList button { width: auto; margin: 0 0 0 6px; padding: 4px 10px; }
   .detour-pane p { margin: 8px 0 0; color: var(--muted); font-size: .88rem; }
-  .btn-export { border: 0; border-radius: 14px; padding: 16px 14px; font-weight: 800; font-size: 1.05rem; background: var(--yellow); color: #111; cursor: pointer; box-shadow: 0 2px 0 #b89b00; width: 100%; }
+  .btn-export { border: 0; border-radius: 14px; padding: 16px 14px; font-weight: 800; font-size: 1.05rem; background: var(--red); color: #fff; cursor: pointer; box-shadow: 0 2px 0 #7a0000; width: 100%; }
   .btn-export:active { transform: translateY(1px); box-shadow: none; }
   .summary { padding: 8px 16px; font-size: .85rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
 
   /* ---------- Haltestellenliste ---------- */
   ol#stops { list-style: none; margin: 0; padding: 0; background: #fff; }
   .stop { border-bottom: 1px solid var(--line); padding: 13px 16px; cursor: pointer; animation: fadeIn .35s ease; }
-  .stop.selected { background: #fff9d6; box-shadow: inset 4px 0 0 var(--yellow); }
+  .stop.selected { background: #f4f4f4; box-shadow: inset 4px 0 0 var(--red); }
   @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
   .stop-head { display: flex; align-items: center; gap: 12px; }
   .num { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--yellow); border: 2px solid #333; display: grid; place-items: center; font-weight: 800; font-size: .85rem; }
@@ -149,7 +149,7 @@
   .me-dot { width: 20px; height: 20px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px #1a73e8, 0 0 8px rgba(0,0,0,.4); }
 
   /* ---------- Umschalter ---------- */
-  .toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #e3e8ee; border-radius: 14px; padding: 4px; }
+  .toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #e9e9e9; border-radius: 14px; padding: 4px; }
   .toggle::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--blue); border-radius: 11px; transition: transform .3s ease; }
   .toggle[data-variant="kurz"]::before, .toggle[data-dir="rueck"]::before { transform: translateX(100%); }
   .toggle button { position: relative; z-index: 1; border: 0; background: none; padding: 13px 6px; font-weight: 700; font-size: 1rem; color: var(--muted); cursor: pointer; transition: color .3s; border-radius: 11px; line-height: 1.25; }
@@ -157,11 +157,11 @@
   .toggle button[aria-pressed="true"] { color: #fff; }
 
   /* ---------- Startbildschirm ---------- */
-  #start { position: fixed; inset: 0; z-index: 4000; background: linear-gradient(160deg, #18397a 0%, #1f62b0 58%, #3d90d5 100%); color: #fff; overflow-y: auto; }
+  #start { position: fixed; inset: 0; z-index: 4000; background: linear-gradient(160deg, #000000 0%, #1c1c1c 60%, #2e2e2e 100%); color: #fff; overflow-y: auto; }
   .start-in { max-width: 520px; margin: 0 auto; min-height: 100%; padding: calc(22px + var(--safe-t)) 18px calc(22px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; }
   .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
   .brand .badge { font-size: 2rem; padding: 4px 16px; border-radius: 12px; }
-  .brand h1 { margin: 0; font-size: 1.7rem; letter-spacing: .14em; font-weight: 900; }
+  .brand h1 { margin: 0; font-size: 1.6rem; font-weight: 800; }
   .brand p { margin: 2px 0 0; opacity: .85; font-size: .95rem; }
   .s-card { background: #fff; color: var(--text); border-radius: 20px; padding: 14px; }
   .s-card h3 { margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--blue); }
@@ -172,7 +172,7 @@
   .line-card.off { border-color: var(--line); opacity: .55; margin-top: 8px; }
   .grow { flex: 1; }
   .big-btn { border: 0; border-radius: 18px; padding: 19px; font-weight: 800; font-size: 1.15rem; cursor: pointer; }
-  .big-btn.primary { background: var(--yellow); color: #111; box-shadow: 0 3px 0 #b89b00; }
+  .big-btn.primary { background: var(--red); color: #fff; box-shadow: 0 3px 0 #7a0000; }
   .big-btn.secondary { background: rgba(255,255,255,.95); color: var(--blue-dark); }
   .fine { font-size: .75rem; opacity: .75; text-align: center; margin: 4px 0 0; }
 </style>
@@ -287,7 +287,7 @@
 
 <div id="start">
   <div class="start-in">
-    <div class="brand"><span class="badge">390</span><div><h1>BOGESTRA</h1><p>Routen-Lernhilfe für Busfahrer</p></div></div>
+    <div class="brand"><span class="badge">390</span><div><h1>Routen-Lernhilfe</h1><p>Linie 390 · für Busfahrer</p></div></div>
     <div class="s-card">
       <h3>Linie</h3>
       <div class="line-card"><span class="badge">390</span><div class="lc-t"><b>Bochum-Linden – Höntrop – Wattenscheid – Herne-Röhlinghausen – Eickel – Herne Bf</b><small>53 Haltestellen je Richtung</small></div><span class="ok">✔</span></div>
@@ -696,7 +696,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   const stops = visibleStops();
   const total = stops.reduce((a, s) => isClosed(s) ? a : a + getDwell(s), 0);
   const L = [];
-  L.push(`BOGESTRA – ${line.title} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label} (${line.variants[variant].desc})`);
+  L.push(`${line.title} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label} (${line.variants[variant].desc})`);
   L.push(`Erstellt am: ${new Date().toLocaleString("de-DE")}`);
   L.push(`Haltestellen: ${routeStops(stops).length}   |   Standzeit gesamt: ${total} Min.`);
   if (detourOn()) L.push(`*** UMLEITUNG AKTIV – entfallene Haltestellen: ${stops.length - routeStops(stops).length} ***`);
@@ -716,7 +716,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   const blob = new Blob(["﻿" + L.join("\r\n") + "\r\n"], { type: "text/plain;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `BOGESTRA_Linie_${ACTIVE_LINE}_${line.dirs[dir].label}_${line.variants[variant].label}.txt`;
+  a.download = `Linie_${ACTIVE_LINE}_${line.dirs[dir].label}_${line.variants[variant].label}.txt`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
@@ -748,7 +748,7 @@ function LeafletView() {
     render(stops, sel, fit) {
       layer.clearLayers(); byId = {}; order = stops;
       const pts = stops.map(s => [s.lat, s.lng]);
-      L.polyline(routePts(routeStops(stops)), { color: detourOn() ? "#e65100" : "#1f62b0", weight: 5, opacity: .9 }).addTo(layer);
+      L.polyline(routePts(routeStops(stops)), { color: detourOn() ? "#e65100" : "#1b1b1b", weight: 5, opacity: .9 }).addTo(layer);
       routeStops(stops).forEach(s => viasAfter(s).forEach(v => L.circleMarker([v.lat, v.lng], { radius: 7, color: "#7a3600", weight: 2, fillColor: "#ff9800", fillOpacity: 1 }).bindTooltip("Umleitungspunkt").addTo(layer)));
       if (draft) {   // Umleitung in Arbeit: gestrichelte Hilfslinie + Punkte
         const f = stops.find(x => x.id === draft.fromId);
@@ -832,7 +832,7 @@ function SvgMapView() {
     for (let y = 0; y < H; y += 60) svg.appendChild(el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: "#d6dfcd", "stroke-width": 1 }));
 
     svg.appendChild(el("polyline", {
-      points: pts.map(p => `${p.px},${p.py}`).join(" "), fill: "none", stroke: "#1f62b0",
+      points: pts.map(p => `${p.px},${p.py}`).join(" "), fill: "none", stroke: "#1b1b1b",
       "stroke-width": 6, "stroke-linejoin": "round", "stroke-linecap": "round"
     }));
     pts.forEach((p, i) => {
@@ -841,7 +841,7 @@ function SvgMapView() {
       g.appendChild(el("circle", { cx: p.px, cy: p.py, r, fill: "#FFD400", stroke: "#222", "stroke-width": p.s.id === sel ? 4 : 2.5 }));
       g.appendChild(el("text", { x: p.px, y: p.py + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 800, fill: "#111" }, i + 1));
       g.appendChild(el("title", {}, p.s.name));
-      const label = el("text", { x: p.px + 20, y: p.py - 6, "font-size": 12, "font-weight": 600, fill: "#1b2430", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, p.s.name);
+      const label = el("text", { x: p.px + 20, y: p.py - 6, "font-size": 12, "font-weight": 600, fill: "#111111", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, p.s.name);
       g.appendChild(label);
       if (hasStand(p.s)) {
         g.appendChild(el("text", { x: p.px + 20, y: p.py + 11, "font-size": 12, "font-weight": 800, fill: "#d10000", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, dwellText(p.s)));
@@ -1347,14 +1347,14 @@ function stopLive() {
 $("liveBtn").addEventListener("click", () => live.on ? stopLive() : startLive());
 $("liveStop").addEventListener("click", stopLive);
 $("logBtn").addEventListener("click", () => {
-  const L = [`BOGESTRA – Fahrtprotokoll Linie ${ACTIVE_LINE} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label}`,
+  const L = [`Fahrtprotokoll Linie ${ACTIVE_LINE} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label}`,
     `Erstellt am: ${new Date().toLocaleString("de-DE")}`, "=".repeat(60), ""];
   live.log.forEach(e => L.push(`${fmtTime(e.t)}  ${e.text}`));
   const stops = visibleStops(), reached = stops.filter(st => live.visited[st.id]).length;
   L.push("", "=".repeat(60), `Haltestellen erkannt: ${reached} von ${stops.length}`, `Abweichungen von der Route: ${live.offCount}`);
   const blob = new Blob(["\ufeff" + L.join("\r\n") + "\r\n"], { type: "text/plain;charset=utf-8" });
   const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
-  a.download = `BOGESTRA_Fahrtprotokoll_${ACTIVE_LINE}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
+  a.download = `Fahrtprotokoll_Linie${ACTIVE_LINE}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-")}.txt`;
   document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
 try { $("alertOpt").checked = localStorage.getItem("bogestra-alert") !== "0"; } catch (e) {}
@@ -1394,7 +1394,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v9 (Farben)";
+const BUILD = "2026-10-28 · Design v10";
 function diag() {
   updateBackupInfo();
   $("buildInfo").textContent = BUILD;
@@ -1410,7 +1410,7 @@ function buildBackup() {
   PREF_KEYS.forEach(k => { try { const v = localStorage.getItem(k); if (v != null) prefs[k] = v; } catch (e) {} });
   return { app: "bogestra-lernhilfe", version: 2, exported: new Date().toISOString(), user, prefs };
 }
-const backupName = () => "BOGESTRA_Sicherung_" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".json";
+const backupName = () => "Sicherung_Routen-Lernhilfe_" + new Date().toISOString().slice(0, 16).replace(/[:T]/g, "-") + ".json";
 function updateBackupInfo() {
   let t = ""; try { t = localStorage.getItem("bogestra-lastbackup") || ""; } catch (e) {}
   $("backupInfo").textContent = t ? "Letzte Sicherung: " + new Date(t).toLocaleString("de-DE") : "Noch keine Sicherung erstellt.";
@@ -1428,14 +1428,14 @@ try {   // Teilen-Knopf nur, wenn der Browser Dateien teilen kann (Handy)
 $("shareBtn").addEventListener("click", async () => {
   try {
     const file = new File([JSON.stringify(buildBackup(), null, 1)], backupName(), { type: "application/json" });
-    await navigator.share({ files: [file], title: "BOGESTRA Sicherung" }); noteBackupDone();
+    await navigator.share({ files: [file], title: "Sicherung Routen-Lernhilfe" }); noteBackupDone();
   } catch (e) {}
 });
 $("restoreBtn").addEventListener("click", () => $("restoreFile").click());
 $("restoreFile").addEventListener("change", async () => {
   const f = $("restoreFile").files[0]; $("restoreFile").value = ""; if (!f) return;
   let obj; try { obj = JSON.parse(await f.text()); } catch (e) { alert("Die Datei konnte nicht gelesen werden."); return; }
-  if (!obj || obj.app !== "bogestra-lernhilfe" || typeof obj.user !== "object" || !obj.user) { alert("Das ist keine BOGESTRA-Sicherung."); return; }
+  if (!obj || obj.app !== "bogestra-lernhilfe" || typeof obj.user !== "object" || !obj.user) { alert("Das ist keine Sicherung dieser App."); return; }
   if (!confirm("Die aktuellen Eingaben (Notizen, Standzeiten, Umleitungen, Marker) werden durch die Sicherung ersetzt. Fortfahren?")) return;
   const clean = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, detours: [], closed: {}, included: {}, detourSeq: 0, detour: false, detourBoth: true, trash: [] }, obj.user);
   if (!Array.isArray(clean.trash)) clean.trash = [];
