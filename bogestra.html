@@ -40,7 +40,7 @@
     content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
     background: var(--blue); border-radius: 9px; transition: transform .3s ease;
   }
-  .toggle[data-variant="kurz"]::before { transform: translateX(100%); }
+  .toggle[data-variant="kurz"]::before, .toggle[data-dir="rueck"]::before { transform: translateX(100%); }
   .toggle button {
     position: relative; z-index: 1; border: 0; background: none; padding: 10px 6px; font: inherit; font-weight: 700;
     color: var(--muted); cursor: pointer; transition: color .3s; border-radius: 9px; line-height: 1.2;
@@ -125,6 +125,10 @@
   </header>
 
   <div class="controls">
+    <div class="toggle" id="dirToggle" data-dir="hin" role="group" aria-label="Fahrtrichtung">
+      <button type="button" data-dir="hin" aria-pressed="true">Hinfahrt<small>Linden → Herne Bf</small></button>
+      <button type="button" data-dir="rueck" aria-pressed="false">Rückfahrt<small>Herne Bf → Linden</small></button>
+    </div>
     <div class="toggle" id="toggle" data-variant="lang" role="group" aria-label="Streckenvariante">
       <button type="button" data-variant="lang" aria-pressed="true">Langläufer<small>gesamte Strecke</small></button>
       <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
@@ -163,10 +167,12 @@
     standzeit      z. B. "5 Min"  -> wird am Marker in ROT angezeigt
     fahrerNotiz    z. B. "Nach der Ampel rechts am Lidl" -> Info-Fenster
     isKurzlaeufer  true = Haltestelle ist auch Teil der Kurzläufer-Route
-  QUELLE: Linienband/Fahrplan 390 (Bochum Linden Mitte -> Herne Bf, Richtung Herne), Koordinaten
+  HINFAHRT (haltestellen-390): Bochum Linden Mitte -> Herne Bf.  RÜCKFAHRT (haltestellen-390-rueck): Herne Bf -> Linden Mitte.
+  QUELLE: Linienband/Fahrplan 390, Koordinaten
   aus den VRR-Haltestellen-Stammdaten (STOP_NR). Standzeiten und Fahrer-Notizen stehen nicht im
   Fahrplan und sind leer – in der App (Liste links) oder hier im JSON eintragen.
   ANNAHME Kurzläufer: Fahrten, die ab Bochum Birkenfeldstr. starten (z. B. 4.36 / 5.06 Uhr, Mo-Fr).
+  Rückfahrt: Ridderstr. und Halfmannswiese werden laut Fahrplan nicht bedient; ANNAHME Kurzläufer = Fahrten bis Birkenfeldstr.
   Anpassen über isKurzlaeufer.
 -->
 <script type="application/json" id="haltestellen-390">
@@ -207,29 +213,70 @@
   { "stopNr": 7501, "name": "Herne Bf", "lat": 51.54436, "lng": 7.21681, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  }
 ]
 </script>
+<script type="application/json" id="haltestellen-390-rueck">
+[
+  { "stopNr": 7501, "name": "Herne Bf", "lat": 51.54436, "lng": 7.21681, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7502, "name": "Herne Mitte", "lat": 51.54071, "lng": 7.22098, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5003, "name": "Herne Rathaus", "lat": 51.53872, "lng": 7.2195, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5210, "name": "Herne Gertrudenplatz", "lat": 51.53842, "lng": 7.21362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5726, "name": "Herne An der Ziegelei", "lat": 51.53726, "lng": 7.20346, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5710, "name": "Herne Buschkampstr.", "lat": 51.53866, "lng": 7.19981, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5751, "name": "Herne Zeche Julia", "lat": 51.53747, "lng": 7.19118, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5715, "name": "Herne Dorstener Str.", "lat": 51.53073, "lng": 7.18636, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7584, "name": "Herne Dorneburger Str.", "lat": 51.52226, "lng": 7.18043, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5718, "name": "Herne Eickeler Markt", "lat": 51.51477, "lng": 7.18002, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5705, "name": "Herne Auf der Wenge", "lat": 51.51317, "lng": 7.17895, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5720, "name": "Herne Eickel Ev. Krankenhaus", "lat": 51.51146, "lng": 7.17694, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5713, "name": "Herne Dahlhauser Str.", "lat": 51.50782, "lng": 7.16902, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5717, "name": "Herne Eickeler Bruch", "lat": 51.51166, "lng": 7.16514, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5737, "name": "Herne Königsgruber Str.", "lat": 51.51251, "lng": 7.16088, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 6784, "name": "Herne Röhlinghausen Markt", "lat": 51.51308, "lng": 7.15475, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7615, "name": "Herne Röhlinghausen Kirche", "lat": 51.5128, "lng": 7.15254, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5487, "name": "Bochum Röhlinghauser Str.", "lat": 51.5037, "lng": 7.15844, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5202, "name": "Bochum Ulrichstr.", "lat": 51.49485, "lng": 7.14605, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5267, "name": "Bochum Birkenfeldstr.", "lat": 51.49614, "lng": 7.13862, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5823, "name": "Bochum Hüller Str.", "lat": 51.48938, "lng": 7.13857, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5168, "name": "Bochum Freiheitstr.", "lat": 51.48255, "lng": 7.13489, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5264, "name": "Bochum August-Bebel-Platz", "lat": 51.48062, "lng": 7.13877, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5114, "name": "Bochum Lohackerstr.", "lat": 51.4718, "lng": 7.14497, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5366, "name": "Bochum Höntrop Kirche", "lat": 51.46405, "lng": 7.15199, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5504, "name": "Bochum Höntrop", "lat": 51.46027, "lng": 7.15463, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5115, "name": "Bochum Mattenburg", "lat": 51.4565, "lng": 7.15362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5027, "name": "Bochum Elchweg", "lat": 51.45059, "lng": 7.14753, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5228, "name": "Bochum Zollstr.", "lat": 51.44442, "lng": 7.16035, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5260, "name": "Bochum Scharpenseelstr.", "lat": 51.44065, "lng": 7.15823, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 6749, "name": "Bochum Am Sattelgut", "lat": 51.43343, "lng": 7.16227, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5290, "name": "Bochum Linden Mitte", "lat": 51.42627, "lng": 7.16112, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false }
+]
+</script>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
 const ACTIVE_LINE = "390";   // Startkonfiguration
+const parseStops = (jsonId, prefix) => JSON.parse(document.getElementById(jsonId).textContent).map((s, i) => ({
+  id: prefix + String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
+  name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
+  standzeit: s.standzeit || "",
+  fahrerNotiz: s.fahrerNotiz || "",
+  isKurzlaeufer: s.isKurzlaeufer === true
+}));
 const line = {
   title: "Linie " + ACTIVE_LINE,
   variants: {
     lang: { label: "Langläufer", desc: "gesamte Strecke" },
     kurz: { label: "Kurzläufer", desc: "verkürzte Strecke" }
   },
-  // JSON einlesen; optionale Felder mit Defaults auffüllen
-  stops: JSON.parse(document.getElementById("haltestellen-" + ACTIVE_LINE).textContent).map((s, i) => ({
-    id: String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
-    name: s.name, lat: s.lat, lng: s.lng, oLat: s.lat, oLng: s.lng,   // o* = Originalkoordinate (lat/lng werden auf die Straße „gesnappt“)
-    standzeit: s.standzeit || "",
-    fahrerNotiz: s.fahrerNotiz || "",
-    isKurzlaeufer: s.isKurzlaeufer === true
-  }))
+  dirs: {
+    hin:   { label: "Hinfahrt",   desc: "Linden → Herne Bf", stops: parseStops("haltestellen-" + ACTIVE_LINE, "") },
+    rueck: { label: "Rückfahrt",  desc: "Herne Bf → Linden", stops: parseStops("haltestellen-" + ACTIVE_LINE + "-rueck", "r") }
+  }
 };
 
 const STORE_KEY = "bogestra-lernhilfe-v2";
 
 let variant = "lang";
+let dir = "hin";
+try { if (localStorage.getItem("bogestra-dir") === "rueck") dir = "rueck"; } catch (e) {}
 let selectedId = null;
 let mapView = null;
 let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text} }
@@ -246,7 +293,7 @@ const getStand = s => (s.id in user.standzeit ? user.standzeit[s.id] : s.standze
 const hasStand = s => getStand(s).trim() !== "";
 const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Summe
 const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
-const visibleStops = () => line.stops.filter(s => variant === "lang" || s.isKurzlaeufer);
+const visibleStops = () => line.dirs[dir].stops.filter(s => variant === "lang" || s.isKurzlaeufer);
 const dwellText = s => `${getStand(s).trim()} Standzeit`;
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
@@ -330,8 +377,18 @@ document.querySelectorAll("#toggle button").forEach(btn => btn.addEventListener(
   updateTitle();
   refresh(true);
 }));
+document.querySelectorAll("#dirToggle button").forEach(btn => btn.addEventListener("click", () => setDir(btn.dataset.dir)));
+function setDir(d) {
+  dir = d;
+  try { localStorage.setItem("bogestra-dir", dir); } catch (e) {}
+  document.getElementById("dirToggle").dataset.dir = dir;
+  document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === dir)));
+  selectedId = null; live.lastSeg = 0;
+  updateTitle();
+  refresh(true);
+}
 function updateTitle() {
-  document.getElementById("lineTitle").textContent = `${line.title} · ${line.variants[variant].label} (${line.variants[variant].desc})`;
+  document.getElementById("lineTitle").textContent = `${line.title} · ${line.dirs[dir].label} (${line.dirs[dir].desc}) · ${line.variants[variant].label}`;
 }
 
 /* ---------- Export (.txt) ---------- */
@@ -339,7 +396,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   const stops = visibleStops();
   const total = stops.reduce((a, s) => a + getDwell(s), 0);
   const L = [];
-  L.push(`BOGESTRA – ${line.title} – ${line.variants[variant].label} (${line.variants[variant].desc})`);
+  L.push(`BOGESTRA – ${line.title} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label} (${line.variants[variant].desc})`);
   L.push(`Erstellt am: ${new Date().toLocaleString("de-DE")}`);
   L.push(`Haltestellen: ${stops.length}   |   Standzeit gesamt: ${total} Min.`);
   L.push("=".repeat(60), "");
@@ -357,7 +414,7 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   const blob = new Blob(["﻿" + L.join("\r\n") + "\r\n"], { type: "text/plain;charset=utf-8" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `BOGESTRA_Linie_${ACTIVE_LINE}_${line.variants[variant].label}.txt`;
+  a.download = `BOGESTRA_Linie_${ACTIVE_LINE}_${line.dirs[dir].label}_${line.variants[variant].label}.txt`;
   document.body.appendChild(a); a.click(); a.remove();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 });
@@ -649,6 +706,7 @@ function useLeaflet() {
 }
 
 /* Start */
+if (dir === "rueck") { document.getElementById("dirToggle").dataset.dir = "rueck"; document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === "rueck"))); }
 updateTitle();
 if (window.L) useLeaflet(); else useSvg();   // Leaflet nicht ladbar (offline) -> SVG-Ersatzkarte
 </script>
