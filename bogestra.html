@@ -797,7 +797,7 @@ const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
   const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
-  return "bogestra-route-v4:" + stops.length + ":" + h;
+  return "bogestra-route-v5:" + stops.length + ":" + h;
 };
 // Solange die Straßenroute lädt (oder nicht verfügbar ist): Luftlinie über Haltestellen und Umleitungspunkte
 const routePts = stops => routeCache[routeKey(stops)] || routePoints(stops, true).pts;
@@ -893,14 +893,14 @@ function cleanSpurs(geo) {
   while (i < geo.length) {
     out.push(geo[i]);
     let jump = -1, len = 0;
-    for (let j = i + 1; j < geo.length && j <= i + 80; j++) {
+    for (let j = i + 1; j < geo.length && j <= i + 160; j++) {
       len += Math.hypot(P[j][0] - P[j - 1][0], P[j][1] - P[j - 1][1]);
-      if (len > 300) break;
+      if (len > 500) break;
       if (j >= i + 3 && len > 30 && Math.hypot(P[j][0] - P[i][0], P[j][1] - P[i][1]) < 15) {
         let a = 0;
         for (let q = i; q < j; q++) a += P[q][0] * P[q + 1][1] - P[q + 1][0] * P[q][1];
         a = Math.abs(a + P[j][0] * P[i][1] - P[i][0] * P[j][1]) / 2;
-        if (a < 0.02 * len * len) { jump = j; break; }
+        if (a < 0.05 * len * len) { jump = j; break; }
       }
     }
     i = jump > 0 ? jump : i + 1;
@@ -1165,11 +1165,11 @@ function monitor(stops, pos, best, nextIdx) {
   }
   // 2) Haltestellen erreicht / nicht erkannt
   stops.forEach((st, i) => {
-    if (!live.visited[st.id] && hav(pos, st) < Math.max(45, pos.acc)) { live.visited[st.id] = now; logEvent(`Haltestelle erreicht: ${i + 1}. ${st.name}`); }
+    if (!live.visited[st.id] && hav(pos, st) < Math.max(45, pos.acc)) { live.visited[st.id] = now; logEvent(`Haltestelle erreicht: ${stopNum(st)}. ${st.name}`); }
   });
   for (let i = live.startIdx; i < best.k; i++) {
     const st = stops[i];
-    if (st && !live.visited[st.id] && !live.skipped[st.id]) { live.skipped[st.id] = now; logEvent(`Haltestelle NICHT erkannt: ${i + 1}. ${st.name}`); }
+    if (st && !live.visited[st.id] && !live.skipped[st.id]) { live.skipped[st.id] = now; logEvent(`Haltestelle NICHT erkannt: ${stopNum(st)}. ${st.name}`); }
   }
   const reached = stops.filter(st => live.visited[st.id]).length, missed = stops.filter(st => live.skipped[st.id] && !live.visited[st.id]).length;
   $("liveStats").textContent = `✔ ${reached}/${stops.length} Haltestellen · nicht erkannt: ${missed} · Abweichungen: ${live.offCount}`;
@@ -1177,6 +1177,7 @@ function monitor(stops, pos, best, nextIdx) {
   $("liveWarn").textContent = o.active ? `⚠ ABWEICHUNG VON DER ROUTE: ${fmtDist(dr)}` : (pos.acc > 80 ? "GPS ungenau (" + Math.round(pos.acc) + " m)" : "");
 }
 
+const stopNum = st => visibleStops().indexOf(st) + 1;   // gleiche Nummer wie auf der Karte, auch wenn Haltestellen entfallen
 function updateLive() {
   const stops = routeStops(visibleStops()), pos = live.pos;
   if (!pos || stops.length < 2) return;
@@ -1198,7 +1199,7 @@ function updateLive() {
   live.nextId = next.id;
   $("liveState").textContent = state;
   $("liveDist").textContent = fmtDist(dNext);
-  $("liveName").textContent = `${nextIdx + 1}. ${next.name}`;
+  $("liveName").textContent = `${stopNum(next)}. ${next.name}`;
   $("liveStand").textContent = hasStand(next) ? "⏱ " + dwellText(next) : "";
   $("liveNote").textContent = getStopNote(next) ? "📝 " + getStopNote(next) : "";
   const prev = prevIdx >= 0 ? stops[prevIdx] : null, pbox = $("livePrev");
@@ -1307,7 +1308,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Gegenrichtung-Umleitung v3";
+const BUILD = "2026-10-28 · Umleitung v4";
 function diag() {
   $("buildInfo").textContent = BUILD;
   const act = activeDetours();
