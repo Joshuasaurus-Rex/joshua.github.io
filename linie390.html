@@ -279,7 +279,9 @@
       </div>
       <div class="pane-card">
         <p style="margin:0 0 8px;font-size:.85rem"><b>Version:</b> <span id="buildInfo"></span><br><span id="diagInfo" style="color:var(--muted)"></span></p>
-        <button type="button" class="act" id="hardReload" style="margin-top:0">🔄 Neueste Version laden</button>
+        <p id="memInfo" style="margin:0 0 8px;font-size:.82rem;color:var(--muted)"></p>
+        <button type="button" class="act" id="clearCache" style="margin-top:0">🧹 Zwischenspeicher leeren</button>
+        <button type="button" class="act" id="hardReload">🔄 Neueste Version laden</button>
       </div>
       <div class="pane-card"><p style="margin:0;color:var(--muted);font-size:.85rem">Eingaben (Notizen, Standzeiten, Umleitungen, verschobene Marker) werden nur in diesem Browser gespeichert.<br>Karte © OpenStreetMap-Mitwirkende · Haltestellen: Fahrplan 390 und VRR-Stammdaten.</p></div>
     </div>
@@ -1405,8 +1407,31 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v12";
+const BUILD = "2026-10-28 · Design v13";
+function memStats() {
+  let user = 0, cache = 0, other = 0, n = 0;
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i), size = (k.length + (localStorage.getItem(k) || "").length) * 2; n++;
+      if (k === STORE_KEY) user += size; else if (/^bogestra-(route|anchors?)-/.test(k)) cache += size; else other += size;
+    }
+  } catch (e) {}
+  return { user, cache, other, n, total: user + cache + other };
+}
+const kb = b => (b / 1024 < 10 ? (b / 1024).toFixed(1) : Math.round(b / 1024)) + " KB";
+function updateMemInfo() {
+  const m = memStats(); let quota = "";
+  const line = () => $("memInfo").textContent = `Speicher im Browser: ${kb(m.total)} von ca. 5 MB belegt (Eingaben ${kb(m.user)}, Zwischenspeicher ${kb(m.cache)}, Sonstiges ${kb(m.other)}).` + (m.total > 4.2 * 1048576 ? " ⚠ fast voll – „Zwischenspeicher leeren“ tippen." : "") + quota;
+  line();
+  try { if (navigator.storage && navigator.storage.estimate) navigator.storage.estimate().then(e => { if (e && e.quota) { quota = ` Freier Platz laut Browser: ca. ${Math.round((e.quota - e.usage) / 1048576)} MB.`; line(); } }); } catch (e) {}
+}
+$("clearCache").addEventListener("click", () => {
+  purgeCaches(true);
+  Object.keys(routeCache).forEach(k => delete routeCache[k]); Object.keys(anchorMem).forEach(k => delete anchorMem[k]);
+  updateMemInfo(); showToast("Zwischenspeicher geleert. Routen werden neu berechnet.", () => {}, "OK"); refresh(false);
+});
 function diag() {
+  updateMemInfo();
   updateBackupInfo();
   $("buildInfo").textContent = BUILD;
   const act = activeDetours();
