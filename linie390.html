@@ -218,7 +218,7 @@
     </div>
     <div id="dock">
       <button type="button" class="dock-btn" id="openStops"><b>📋</b>Haltestellen</button>
-      <button type="button" class="dock-btn" id="openDetour"><b>🚧</b>Umleitung</button>
+      <button type="button" class="dock-btn" id="openDetour"><b>🛣</b>Strecke</button>
       <button type="button" class="dock-btn hidden" id="logBtn"><b>📄</b>Protokoll</button>
       <button type="button" class="dock-btn live" id="liveBtn"><b>📍</b>Live starten</button>
     </div>
@@ -230,7 +230,7 @@
   <div class="sheet-top">
     <nav class="tabs">
       <button type="button" data-tab="stops" class="on">Haltestellen</button>
-      <button type="button" data-tab="detour">Umleitung</button>
+      <button type="button" data-tab="detour">Strecke</button>
       <button type="button" data-tab="more">Mehr</button>
     </nav>
     <button type="button" class="closebtn" id="sheetExpand" aria-label="Größer/kleiner">⤢</button>
@@ -244,22 +244,30 @@
   <section class="pane" id="pane-detour">
     <div class="pad detour-pane" id="detourBox">
       <div class="pane-card">
-        <h3>🚧 Umleitung / Baustelle</h3>
+        <h3>🛣 Strecke korrigieren (dauerhaft)</h3>
+        <p>Wenn die Karte einen Abschnitt falsch führt – z. B. Einbahnstraße oder Busspur, die der Bus befahren darf, oder neu geplante Haltestellen. Die Linie läuft dann gerade durch deine Punkte, ohne Straßenrouting.</p>
+        <button type="button" id="directEditBtn">✏ Abschnitt einzeichnen</button>
+        <div id="directList"></div>
+      </div>
+      <div class="pane-card">
+        <h3>🚧 Umleitung / Baustelle (zeitweise)</h3>
         <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv</label>
-        <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung.</p>
-        <label class="chk" style="margin-top:10px"><input type="checkbox" id="drawDirect"> Als Direktstrecke zeichnen</label>
-        <p style="margin-top:2px">Ohne Straßenrouting, gerade durch deine Punkte – für Abschnitte, die die Karte nicht kennt (Busspur, Einbahnstraße, die der Bus befahren darf). Gilt immer, nicht nur bei „Umleitung aktiv“.</p>
-        <label class="chk" style="margin-top:10px"><input type="checkbox" id="detourBoth" checked> Neue Umleitungen auch für die Gegenrichtung übernehmen</label>
+        <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung. Haltestellen dazwischen entfallen.</p>
         <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
-        <div class="row"><button type="button" id="viaUndo">↩ Letzten Schritt zurück</button><button type="button" id="viaClear">Alle löschen</button></div>
         <div id="detourList"></div>
-        <button type="button" id="trashBtn" class="hidden">↩ Gelöschte Umleitungen zurückholen</button>
+      </div>
+      <div class="pane-card">
+        <h3>Bearbeiten</h3>
+        <label class="chk"><input type="checkbox" id="detourBoth" checked> Neue Einträge auch für die Gegenrichtung übernehmen</label>
+        <div class="row"><button type="button" id="viaUndo">↩ Letzten Schritt zurück</button><button type="button" id="viaClear">Alles löschen</button></div>
+        <button type="button" id="trashBtn" class="hidden">↩ Gelöschtes zurückholen</button>
       </div>
       <div class="pane-card">
         <h3>So geht’s</h3>
         <ol class="how">
-          <li><b>Umleitung einzeichnen:</b> Start-Haltestelle antippen → Punkte entlang der Umleitung antippen → End-Haltestelle antippen. Haltestellen dazwischen entfallen (grau).</li>
-          <li><b>Haltestelle auf der Umleitung wieder dazunehmen:</b> graue Haltestelle auf der Karte oder in der Liste antippen. Sie wird wieder angefahren (oranger Rand).</li>
+          <li><b>Einzeichnen:</b> Start-Haltestelle antippen → Punkte entlang des tatsächlichen Wegs antippen (in Fahrtrichtung) → End-Haltestelle antippen.</li>
+          <li><b>Umleitung:</b> Haltestellen dazwischen entfallen (grau). Eine graue Haltestelle auf Karte oder Liste antippen nimmt sie wieder dazu (oranger Rand).</li>
+          <li><b>Streckenkorrektur:</b> alle Haltestellen dazwischen bleiben, nur der Weg wird von Hand gezeichnet.</li>
           <li><b>Haltestelle streichen:</b> in der Liste öffnen und „Haltestelle entfällt“ ankreuzen.</li>
         </ol>
         <p id="detourHint"></p>
@@ -549,7 +557,7 @@ const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Sum
 const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
 // Umleitung: von Haltestelle A (fromId) über eingezeichnete Punkte zu Haltestelle B (toId); Haltestellen dazwischen entfallen.
 // Zusätzlich kann jede Haltestelle einzeln als „entfällt“ markiert werden.
-let detourEdit = false, draft = null, dragId = null;   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
+let detourEdit = false, draft = null, dragId = null, drawKind = "umleitung";   // dragId: Haltestelle, deren Marker gerade verschoben werden darf   // draft = { fromId, pts: [] } (Umleitung in Arbeit)
 const detourOn = () => !!user.detour;
 // Umleitungen, die für die aktuelle Fahrtrichtung gelten: eigene + (wenn „both“) aus der Gegenrichtung gespiegelt
 // (Start/Ende vertauscht, Punkte umgekehrt; Haltestellen-IDs der Rückrichtung haben das Präfix „r“)
@@ -1133,34 +1141,41 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km"
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
 function syncDetourUi() {
-  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false; $("drawDirect").checked = !!user.drawDirect;
-  $("detourEditBtn").classList.toggle("on", detourEdit);
-  $("detourEditBtn").textContent = detourEdit ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
+  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false;
+  const eu = detourEdit && drawKind === "umleitung", ed = detourEdit && drawKind === "direkt";
+  $("detourEditBtn").classList.toggle("on", eu); $("detourEditBtn").textContent = eu ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
+  $("directEditBtn").classList.toggle("on", ed); $("directEditBtn").textContent = ed ? "✔ Einzeichnen beenden" : "✏ Abschnitt einzeichnen";
   document.body.classList.toggle("editing", detourEdit);
+  const what = drawKind === "direkt" ? "Abschnitt" : "Umleitung", endTxt = drawKind === "direkt" ? "das normale Routing wieder beginnt" : "die normale Route wieder beginnt";
   let h;
-  if (!detourEdit) h = "Einzeichnen: 1. Haltestelle antippen, an der die Umleitung beginnt · 2. Punkte entlang der Umleitung antippen · 3. Haltestelle antippen, an der die normale Route wieder beginnt. Haltestellen dazwischen entfallen automatisch.";
-  else if (!draft) h = "Schritt 1: Tippe auf die Haltestelle (Marker), nach der die Umleitung beginnt.";
-  else h = `Start: ${stopById(draft.fromId).name}. Schritt 2: Tippe Punkte entlang der Umleitung, in Fahrtrichtung (${draft.pts.length} gesetzt). Schritt 3: Tippe die Haltestelle an, an der die normale Route wieder beginnt.`;
+  if (!detourEdit) h = "";
+  else if (!draft) h = `Schritt 1: Tippe auf die Haltestelle (Marker), nach der der ${what} beginnt.`;
+  else h = `Start: ${stopById(draft.fromId).name}. Schritt 2: Tippe Punkte entlang des Wegs, in Fahrtrichtung (${draft.pts.length} gesetzt). Schritt 3: Tippe die Haltestelle an, an der ${endTxt}.`;
   $("detourHint").textContent = detourEdit ? h : "";
   $("editHint").textContent = h;
-  const tr = (user.trash || []).length; $("trashBtn").classList.toggle("hidden", !tr); $("trashBtn").textContent = `↩ Gelöschte Umleitungen zurückholen (${tr})`;
+  const tr = (user.trash || []).length; $("trashBtn").classList.toggle("hidden", !tr); $("trashBtn").textContent = `↩ Gelöschtes zurückholen (${tr})`;
   $("editBar").classList.toggle("hidden", !detourEdit);
-  const box = $("detourList"); box.innerHTML = "";
-  activeDetours().forEach(d => {
-    const src = d.src || d, row = document.createElement("div");
-    row.style.margin = "6px 0";
-    row.innerHTML = `${d.direct ? "➡️ Direktstrecke" : "🚧"} ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
-    const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "löschen";
-    btn.addEventListener("click", () => removeDetours([src]));
-    row.appendChild(btn);
-    if (!d.mirror) {
-      const lab = document.createElement("label"); lab.className = "chk"; lab.style.fontSize = ".85rem";
-      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = d.both !== false;
-      cb.addEventListener("change", () => { d.both = cb.checked; saveUser(); syncDetourUi(); refresh(false); });
-      lab.append(cb, " gilt auch für die Gegenrichtung"); row.appendChild(lab);
-    }
-    box.appendChild(row);
-  });
+  const fill = (box, arr) => {
+    box.innerHTML = "";
+    arr.forEach(d => {
+      const src = d.src || d, row = document.createElement("div");
+      row.style.margin = "6px 0";
+      row.innerHTML = `${d.direct ? "➡️" : "🚧"} ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
+      const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "löschen";
+      btn.addEventListener("click", () => removeDetours([src]));
+      row.appendChild(btn);
+      if (!d.mirror) {
+        const lab = document.createElement("label"); lab.className = "chk"; lab.style.fontSize = ".85rem";
+        const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = d.both !== false;
+        cb.addEventListener("change", () => { d.both = cb.checked; saveUser(); syncDetourUi(); refresh(false); });
+        lab.append(cb, " gilt auch für die Gegenrichtung"); row.appendChild(lab);
+      }
+      box.appendChild(row);
+    });
+  };
+  const all = activeDetours();
+  fill($("detourList"), all.filter(d => !d.direct));
+  fill($("directList"), all.filter(d => d.direct));
 }
 // Haltestelle auf der Umleitung wieder einbinden (Antippen) bzw. entfallen lassen
 let toastTimer = null;
@@ -1190,10 +1205,10 @@ function detourPick(st) {            // Marker im Einzeichnen-Modus angetippt
   else if (st.id !== draft.fromId) {
     const a = vs.findIndex(x => x.id === draft.fromId), b = vs.findIndex(x => x.id === st.id);
     if (b <= a) { $("detourHint").textContent = "Das Ende muss hinter dem Start liegen (in Fahrtrichtung). Tippe eine spätere Haltestelle an."; return; }
-    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false, direct: !!user.drawDirect };
+    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false, direct: drawKind === "direkt" };
     user.detours.push(nd);
     draft = null; detourEdit = false; if (!nd.direct) user.detour = true; saveUser();
-    showToast(nd.direct ? "Direktstrecke gespeichert." : "Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
+    showToast(nd.direct ? "Streckenkorrektur gespeichert." : "Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
   }
   syncDetourUi(); refresh(false);
 }
@@ -1207,7 +1222,7 @@ function removeDetours(list, silent) {
   user.trash = [...list.map(d => JSON.parse(JSON.stringify(d))), ...(user.trash || [])].slice(0, 10);
   user.detours = user.detours.filter(d => !list.includes(d));
   saveUser(); syncDetourUi(); refresh(false);
-  if (!silent) showToast(list.length > 1 ? `${list.length} Umleitungen gelöscht.` : "Umleitung gelöscht.", () => restoreTrash(list.length), "Rückgängig");
+  if (!silent) showToast(list.length > 1 ? `${list.length} Einträge gelöscht.` : "Eintrag gelöscht.", () => restoreTrash(list.length), "Rückgängig");
 }
 function restoreTrash(n) {
   const back = (user.trash || []).splice(0, n || (user.trash || []).length);
@@ -1219,20 +1234,25 @@ function undoDetour() {
   showToast("Nichts rückgängig zu machen. Gespeicherte Umleitungen löschst du unter Menü → Umleitung.", () => {}, "OK");
 }
 $("detourBoth").addEventListener("change", () => { user.detourBoth = $("detourBoth").checked; saveUser(); });
-$("drawDirect").addEventListener("change", () => { user.drawDirect = $("drawDirect").checked; saveUser(); });
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
-$("detourEditBtn").addEventListener("click", () => {
-  detourEdit = !detourEdit; draft = null;
-  if (detourEdit) { if (!user.drawDirect) user.detour = true; saveUser(); closeSheet(); }
+function toggleEdit(kind) {
+  if (detourEdit && drawKind === kind) { detourEdit = false; draft = null; }
+  else {
+    detourEdit = true; drawKind = kind; draft = null;
+    if (kind === "umleitung") user.detour = true;
+    saveUser(); closeSheet();
+  }
   syncDetourUi(); refresh(false);
-});
+}
+$("detourEditBtn").addEventListener("click", () => toggleEdit("umleitung"));
+$("directEditBtn").addEventListener("click", () => toggleEdit("direkt"));
 $("editDone").addEventListener("click", () => { detourEdit = false; draft = null; syncDetourUi(); refresh(false); });
 $("editUndo").addEventListener("click", () => undoDetour());
 $("viaUndo").addEventListener("click", undoDetour);
 $("viaClear").addEventListener("click", () => {
   const gone = activeDetours().map(d => d.src || d); draft = null;
   if (!gone.length) return;
-  if (!confirm(`Alle ${gone.length} Umleitung(en) dieser Fahrtrichtung löschen?`)) return;
+  if (!confirm(`Alle ${gone.length} Einträge (Umleitungen und Streckenkorrekturen) dieser Fahrtrichtung löschen?`)) return;
   removeDetours(gone);
 });
 $("trashBtn").addEventListener("click", () => restoreTrash());
@@ -1437,7 +1457,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v16";
+const BUILD = "2026-10-28 · Design v17";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
