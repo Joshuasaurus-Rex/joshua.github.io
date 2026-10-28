@@ -77,10 +77,10 @@
   .fields { display: none; margin-top: 8px; gap: 8px; }
   .stop.selected .fields { display: grid; }
   .fields label { font-size: .75rem; color: var(--muted); display: grid; gap: 3px; }
-  .fields textarea, .fields input[type="number"] {
+  .fields textarea, .fields input[type="text"] {
     width: 100%; font: inherit; font-size: .9rem; font-weight: 400; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical;
   }
-  .fields input[type="number"] { width: 90px; }
+  .fields input[type="text"] { width: 100%; }
   .seg-label { color: var(--blue-dark) !important; font-weight: 700; }
   /* Kompakte Vorschau der Notizen bei nicht gewählten Haltestellen */
   .peek { margin: 4px 0 0 38px; font-size: .8rem; color: var(--muted); }
@@ -92,6 +92,8 @@
   #map { position: absolute; inset: 0; }
   #svgmap { position: absolute; inset: 0; width: 100%; height: 100%; background: #eaf0e4; }
   .svg-note { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
+  .svg-info { position: absolute; left: 10px; top: 10px; background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
+  .svg-info .st { color: var(--red); font-weight: 800; }
   .hidden { display: none !important; }
 
   @media (max-width: 760px) {
@@ -132,74 +134,76 @@
 <main>
   <div id="map" class="hidden"></div>
   <svg id="svgmap" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="svg-info hidden" id="svgInfo"></div>
   <div class="svg-note" id="svgNote">Schematische Ersatzkarte – für die echte Google-Karte links unter „Google-Maps-API-Schlüssel“ einen Key eintragen.</div>
 </main>
 
-<script>
-/* =====================================================================
-   DATEN – hier die echten BOGESTRA-Wegpunkte eintragen
-   ---------------------------------------------------------------------
-   Alle Koordinaten und Namen unten sind DUMMY-Werte (frei erfunden).
-   Pro Haltestelle:
-     id      eindeutige Kennung (für gespeicherte Notizen – nicht ändern!)
-     name    Haltestellenname
-     lat/lng Koordinaten
-     dwell   Standzeit in Minuten (0 = keine)
-     kurz    true  = wird auch vom Kurzläufer bedient
-             false = nur Langläufer
-     note    vorbelegter Hinweis an der Haltestelle (optional)
-     segment vorbelegter Hinweis für den Abschnitt bis zur nächsten Haltestelle (optional)
-   Reihenfolge im Array = Fahrtrichtung.
-   ===================================================================== */
-const LINES = {
-  "390": {
-    title: "Linie 390",
-    variants: {
-      lang: { label: "Langläufer", desc: "gesamte Strecke" },
-      kurz: { label: "Kurzläufer", desc: "verkürzte Strecke" }
-    },
-    stops: [
-      { id: "390-01", name: "Bochum Hbf (Dummy)",          lat: 51.4795, lng: 7.2240, dwell: 5, kurz: true,  note: "Abfahrt Bussteig 3", segment: "" },
-      { id: "390-02", name: "Rathaus (Dummy)",              lat: 51.4822, lng: 7.2165, dwell: 0, kurz: true,  note: "", segment: "" },
-      { id: "390-03", name: "Schauspielhaus (Dummy)",       lat: 51.4838, lng: 7.2078, dwell: 0, kurz: true,  note: "", segment: "Nach der Haltestelle an der 2. Ampel links" },
-      { id: "390-04", name: "Lessingstraße (Dummy)",        lat: 51.4871, lng: 7.1985, dwell: 0, kurz: true,  note: "", segment: "" },
-      { id: "390-05", name: "Marktplatz Nord (Dummy)",      lat: 51.4912, lng: 7.1890, dwell: 0, kurz: true,  note: "Am Lidl rechts abbiegen", segment: "" },
-      { id: "390-06", name: "Stadtpark (Dummy)",            lat: 51.4950, lng: 7.1782, dwell: 3, kurz: true,  note: "", segment: "" },
-      { id: "390-07", name: "Westfriedhof (Dummy)",         lat: 51.4983, lng: 7.1668, dwell: 0, kurz: true,  note: "", segment: "" },
-      { id: "390-08", name: "Wattenscheid Markt (Dummy)",   lat: 51.5008, lng: 7.1520, dwell: 8, kurz: true,  note: "Wendeschleife: Kurzläufer endet hier", segment: "" },
-      { id: "390-09", name: "Industriepark (Dummy)",        lat: 51.5075, lng: 7.1390, dwell: 0, kurz: false, note: "", segment: "" },
-      { id: "390-10", name: "Gewerbegebiet Ost (Dummy)",    lat: 51.5130, lng: 7.1270, dwell: 0, kurz: false, note: "", segment: "" },
-      { id: "390-11", name: "Kanalbrücke (Dummy)",          lat: 51.5198, lng: 7.1160, dwell: 0, kurz: false, note: "Achtung: enge Brücke, Gegenverkehr", segment: "" },
-      { id: "390-12", name: "Gelsenkirchen Süd (Dummy)",    lat: 51.5265, lng: 7.1040, dwell: 0, kurz: false, note: "", segment: "" },
-      { id: "390-13", name: "Gelsenkirchen Hbf (Dummy)",    lat: 51.5052, lng: 7.1018, dwell: 10, kurz: false, note: "Endhaltestelle Langläufer", segment: "" }
-    ]
-  }
-};
-const ACTIVE_LINE = "390";   // Startkonfiguration
-/* ===================================================================== */
+<!--
+  HALTESTELLEN-DATEN Linie 390 (JSON) – hier die echten VRR-Daten eintragen.
+  Reihenfolge im Array = Fahrtrichtung. Pflicht: name, lat, lng.
+  Optional:
+    stopNr         VRR-Haltestellennummer (STOP_NR aus der Stammdaten-CSV)
+    standzeit      z. B. "5 Min"  -> wird am Marker in ROT angezeigt
+    fahrerNotiz    z. B. "Nach der Ampel rechts am Lidl" -> Info-Fenster
+    isKurzlaeufer  true = Haltestelle ist auch Teil der Kurzläufer-Route
+  ACHTUNG: Koordinaten sind echte VRR-Haltestellenpositionen (Bochum/Herne), die
+  REIHENFOLGE/Zuordnung zur Linie 390 sowie Standzeiten und Notizen sind DUMMY-Werte.
+-->
+<script type="application/json" id="haltestellen-390">
+[
+  { "stopNr": 5194, "name": "Bochum Hbf",                  "lat": 51.47947, "lng": 7.22334, "standzeit": "5 Min", "fahrerNotiz": "Abfahrt Bussteig 3",                                 "isKurzlaeufer": true  },
+  { "stopNr": 5127, "name": "Bochum Rathaus",              "lat": 51.48188, "lng": 7.21602,                         "fahrerNotiz": "",                                                    "isKurzlaeufer": true  },
+  { "stopNr": 5408, "name": "Bochum Präsident Bf",         "lat": 51.48795, "lng": 7.21029,                         "fahrerNotiz": "Nach der Haltestelle an der 2. Ampel links",           "isKurzlaeufer": true  },
+  { "stopNr": 5132, "name": "Bochum Riemke Markt",         "lat": 51.50924, "lng": 7.21124, "standzeit": "3 Min", "fahrerNotiz": "Am Lidl rechts abbiegen",                             "isKurzlaeufer": true  },
+  { "stopNr": 5718, "name": "Herne Eickeler Markt",        "lat": 51.51477, "lng": 7.18002,                                                                                                "isKurzlaeufer": true  },
+  { "stopNr": 5715, "name": "Herne Dorstener Str",         "lat": 51.53073, "lng": 7.18636, "standzeit": "8 Min", "fahrerNotiz": "Wendeschleife – Kurzläufer endet hier",              "isKurzlaeufer": true  },
+  { "stopNr": 7568, "name": "Herne Westring",              "lat": 51.53445, "lng": 7.21995,                         "fahrerNotiz": "Enge Kurve, Gegenverkehr beachten",                   "isKurzlaeufer": false },
+  { "stopNr": 5003, "name": "Herne Rathaus",               "lat": 51.53872, "lng": 7.21950,                                                                                                "isKurzlaeufer": false },
+  { "stopNr": 7501, "name": "Herne Bf",                    "lat": 51.54436, "lng": 7.21681,                                                                                                "isKurzlaeufer": false },
+  { "stopNr": 7510, "name": "Herne Akademie Mont-Cenis",   "lat": 51.53918, "lng": 7.25810, "standzeit": "10 Min", "fahrerNotiz": "Endhaltestelle Langläufer",                          "isKurzlaeufer": false }
+]
+</script>
 
-const STORE_KEY = "bogestra-lernhilfe-v1";
+<script>
+const ACTIVE_LINE = "390";   // Startkonfiguration
+const line = {
+  title: "Linie " + ACTIVE_LINE,
+  variants: {
+    lang: { label: "Langläufer", desc: "gesamte Strecke" },
+    kurz: { label: "Kurzläufer", desc: "verkürzte Strecke" }
+  },
+  // JSON einlesen; optionale Felder mit Defaults auffüllen
+  stops: JSON.parse(document.getElementById("haltestellen-" + ACTIVE_LINE).textContent).map((s, i) => ({
+    id: String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
+    name: s.name, lat: s.lat, lng: s.lng,
+    standzeit: s.standzeit || "",
+    fahrerNotiz: s.fahrerNotiz || "",
+    isKurzlaeufer: s.isKurzlaeufer === true
+  }))
+};
+
+const STORE_KEY = "bogestra-lernhilfe-v2";
 const KEY_STORE = "bogestra-gmaps-key";
 
-const line = LINES[ACTIVE_LINE];
 let variant = "lang";
 let selectedId = null;
 let mapView = null;
-let user = loadUser();   // { dwell: {id: min}, stop: {id: text}, segment: {id: text} }
+let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text} }
 
 /* ---------- Persistenz ---------- */
 function loadUser() {
-  try { return Object.assign({ dwell: {}, stop: {}, segment: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
-  catch (e) { return { dwell: {}, stop: {}, segment: {} }; }
+  try { return Object.assign({ standzeit: {}, fahrerNotiz: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
+  catch (e) { return { standzeit: {}, fahrerNotiz: {} }; }
 }
 function saveUser() { try { localStorage.setItem(STORE_KEY, JSON.stringify(user)); } catch (e) {} }
 
 /* ---------- Abgeleitete Daten ---------- */
-const getDwell = s => (s.id in user.dwell ? user.dwell[s.id] : s.dwell) || 0;
-const getStopNote = s => (s.id in user.stop ? user.stop[s.id] : s.note) || "";
-const getSegNote = s => (s.id in user.segment ? user.segment[s.id] : s.segment) || "";
-const visibleStops = () => line.stops.filter(s => variant === "lang" || s.kurz);
-const dwellText = s => `${getDwell(s)} Min. Standzeit`;
+const getStand = s => (s.id in user.standzeit ? user.standzeit[s.id] : s.standzeit) || "";
+const hasStand = s => getStand(s).trim() !== "";
+const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Summe
+const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
+const visibleStops = () => line.stops.filter(s => variant === "lang" || s.isKurzlaeufer);
+const dwellText = s => `${getStand(s).trim()} Standzeit`;
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 
 /* ---------- Liste ---------- */
@@ -208,7 +212,6 @@ function renderList() {
   const ol = document.getElementById("stops");
   ol.innerHTML = "";
   stops.forEach((s, i) => {
-    const isLast = i === stops.length - 1;
     const li = document.createElement("li");
     li.className = "stop" + (s.id === selectedId ? " selected" : "");
     li.dataset.id = s.id;
@@ -216,21 +219,16 @@ function renderList() {
       <div class="stop-head">
         <span class="num">${i + 1}</span>
         <span class="stop-name">${esc(s.name)}</span>
-        ${getDwell(s) > 0 ? `<span class="dwell">${esc(dwellText(s))}</span>` : ""}
+        ${hasStand(s) ? `<span class="dwell">${esc(dwellText(s))}</span>` : ""}
       </div>
-      ${(getStopNote(s) || (!isLast && getSegNote(s))) ? `<div class="peek">
-        ${getStopNote(s) ? "📝 " + esc(getStopNote(s)) : ""}
-        ${!isLast && getSegNote(s) ? `<br><b>→</b> ${esc(getSegNote(s))}` : ""}</div>` : ""}
+      ${getStopNote(s) ? `<div class="peek">📝 ${esc(getStopNote(s))}</div>` : ""}
       <div class="fields">
-        <label>Standzeit (Minuten)
-          <input type="number" min="0" max="120" value="${getDwell(s)}" data-f="dwell">
+        <label>Standzeit (z. B. „5 Min“)
+          <input type="text" value="${esc(getStand(s))}" data-f="standzeit" placeholder="leer = keine Standzeit">
         </label>
-        <label>Hinweis an der Haltestelle
-          <textarea rows="2" data-f="stop" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
+        <label>Fahrer-Notiz
+          <textarea rows="2" data-f="fahrerNotiz" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
         </label>
-        ${isLast ? "" : `<label class="seg-label">Hinweis Streckenabschnitt bis „${esc(stops[i + 1].name)}“
-          <textarea rows="2" data-f="segment" placeholder="z. B. nach der Haltestelle an der 2. Ampel links">${esc(getSegNote(s))}</textarea>
-        </label>`}
       </div>`;
     li.addEventListener("click", () => select(s.id, { fromList: true }));
     ol.appendChild(li);
@@ -240,14 +238,11 @@ function renderList() {
   ol.querySelectorAll("[data-f]").forEach(el => {
     const id = el.closest(".stop").dataset.id, f = el.dataset.f;
     el.addEventListener("click", e => e.stopPropagation());
-    if (f === "dwell") {
-      el.addEventListener("change", () => {
-        user.dwell[id] = Math.max(0, parseInt(el.value, 10) || 0); saveUser(); refresh(false);
-      });
-    } else {
-      el.addEventListener("input", () => { user[f][id] = el.value; saveUser(); updateSummary(); });
-      el.addEventListener("change", () => refresh(false));
-    }
+    el.addEventListener("input", () => { user[f][id] = el.value; saveUser(); updateSummary(); });
+    el.addEventListener("change", () => {
+      if (f === "standzeit" && /^\d+$/.test(el.value.trim())) { user[f][id] = el.value.trim() + " Min"; saveUser(); }
+      refresh(false);
+    });
   });
   updateSummary();
 }
@@ -304,10 +299,9 @@ document.getElementById("exportBtn").addEventListener("click", () => {
   stops.forEach((s, i) => {
     const isLast = i === stops.length - 1;
     L.push(`${String(i + 1).padStart(2, "0")}. ${s.name}`);
-    if (getDwell(s) > 0) L.push(`    >>> STANDZEIT: ${getDwell(s)} Min. <<<`);
-    if (getStopNote(s).trim()) L.push(`    Hinweis: ${getStopNote(s).trim().replace(/\n/g, "\n             ")}`);
+    if (hasStand(s)) L.push(`    >>> STANDZEIT: ${getDwell(s)} Min. <<<`);
+    if (getStopNote(s).trim()) L.push(`    Fahrer-Notiz: ${getStopNote(s).trim().replace(/\n/g, "\n                  ")}`);
     if (!isLast) {
-      if (getSegNote(s).trim()) L.push(`    Weiter: ${getSegNote(s).trim().replace(/\n/g, "\n            ")}`);
       L.push("    |", "    v");
     } else {
       L.push("    ENDHALTESTELLE");
@@ -356,7 +350,7 @@ function GoogleMapView() {
         });
         m.addListener("click", () => select(s.id));
         markers.push(m); byId[s.id] = m;
-        if (getDwell(s) > 0) {
+        if (hasStand(s)) {
           labels.push(new google.maps.Marker({
             map, position: pos, clickable: false, zIndex: 30,
             icon: { path: "M0,0", scale: 1, labelOrigin: new google.maps.Point(0, 30), strokeOpacity: 0 },
@@ -372,7 +366,7 @@ function GoogleMapView() {
       Object.entries(byId).forEach(([k, m]) => { m.setIcon(stopIcon(k === id)); m.setZIndex(k === id ? 20 : 10); });
       const stops = visibleStops(), i = stops.findIndex(x => x.id === id);
       info.setContent(`<div style="font-family:system-ui;max-width:220px"><b>${i + 1}. ${esc(s.name)}</b>` +
-        (getDwell(s) > 0 ? `<div style="color:#d10000;font-weight:800">${esc(dwellText(s))}</div>` : "") +
+        (hasStand(s) ? `<div style="color:#d10000;font-weight:800">${esc(dwellText(s))}</div>` : "") +
         (getStopNote(s) ? `<div>📝 ${esc(getStopNote(s))}</div>` : "") + `</div>`);
       info.open({ map, anchor: byId[id] });
       map.panTo({ lat: s.lat, lng: s.lng });
@@ -393,6 +387,15 @@ function SvgMapView() {
     if (text != null) n.textContent = text;
     return n;
   };
+  function info() {
+    const box = document.getElementById("svgInfo");
+    const i = current.findIndex(x => x.id === sel);
+    box.classList.toggle("hidden", i < 0);
+    if (i < 0) return;
+    const x = current[i];
+    box.innerHTML = `<b>${i + 1}. ${esc(x.name)}</b>` + (hasStand(x) ? `<div class="st">${esc(dwellText(x))}</div>` : "") +
+      (getStopNote(x) ? `<div>📝 ${esc(getStopNote(x))}</div>` : "");
+  }
   function draw() {
     svg.innerHTML = "";
     const W = svg.clientWidth || 800, H = svg.clientHeight || 600, pad = 60, padR = 190;
@@ -419,9 +422,9 @@ function SvgMapView() {
       g.appendChild(el("circle", { cx: p.px, cy: p.py, r, fill: "#FFD400", stroke: "#222", "stroke-width": p.s.id === sel ? 4 : 2.5 }));
       g.appendChild(el("text", { x: p.px, y: p.py + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 800, fill: "#111" }, i + 1));
       g.appendChild(el("title", {}, p.s.name));
-      const label = el("text", { x: p.px + 20, y: p.py - 6, "font-size": 12, "font-weight": 600, fill: "#1b2430", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, p.s.name.replace(" (Dummy)", ""));
+      const label = el("text", { x: p.px + 20, y: p.py - 6, "font-size": 12, "font-weight": 600, fill: "#1b2430", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, p.s.name);
       g.appendChild(label);
-      if (getDwell(p.s) > 0) {
+      if (hasStand(p.s)) {
         g.appendChild(el("text", { x: p.px + 20, y: p.py + 11, "font-size": 12, "font-weight": 800, fill: "#d10000", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, dwellText(p.s)));
       }
       g.addEventListener("click", () => select(p.s.id));
@@ -430,8 +433,8 @@ function SvgMapView() {
   }
   window.addEventListener("resize", () => { if (current.length) draw(); });
   return {
-    render(stops, s) { current = stops; sel = s; draw(); },
-    select(id) { sel = id; draw(); }
+    render(stops, s) { current = stops; sel = s; draw(); info(); },
+    select(id) { sel = id; draw(); info(); }
   };
 }
 
@@ -450,6 +453,7 @@ function useSvg(msg) {
 function useGoogle() {
   document.getElementById("svgmap").classList.add("hidden");
   document.getElementById("svgNote").classList.add("hidden");
+  document.getElementById("svgInfo").classList.add("hidden");
   document.getElementById("map").classList.remove("hidden");
   mapView = GoogleMapView();
   statusEl.textContent = "Google Maps aktiv.";
