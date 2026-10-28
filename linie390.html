@@ -247,6 +247,8 @@
         <h3>🚧 Umleitung / Baustelle</h3>
         <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv</label>
         <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung.</p>
+        <label class="chk" style="margin-top:10px"><input type="checkbox" id="drawDirect"> Als Direktstrecke zeichnen</label>
+        <p style="margin-top:2px">Ohne Straßenrouting, gerade durch deine Punkte – für Abschnitte, die die Karte nicht kennt (Busspur, Einbahnstraße, die der Bus befahren darf). Gilt immer, nicht nur bei „Umleitung aktiv“.</p>
         <label class="chk" style="margin-top:10px"><input type="checkbox" id="detourBoth" checked> Neue Umleitungen auch für die Gegenrichtung übernehmen</label>
         <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
         <div class="row"><button type="button" id="viaUndo">↩ Letzten Schritt zurück</button><button type="button" id="viaClear">Alle löschen</button></div>
@@ -557,7 +559,7 @@ const activeDetours = () => {
   user.detours.forEach(d => {
     if (has(d.fromId)) own.push(d);
     else if (d.both !== false && has(mirrorId(d.fromId)) && has(mirrorId(d.toId)))
-      mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d });
+      mir.push({ fromId: mirrorId(d.toId), toId: mirrorId(d.fromId), pts: d.pts.slice().reverse(), n: d.n, mirror: true, src: d, direct: d.direct });
   });
   return [...own, ...mir];
 };
@@ -566,6 +568,7 @@ const detourRange = () => {
   const ids = {}; if (!detourOn()) return ids;
   const vs = visibleStops();
   activeDetours().forEach(d => {
+    if (d.direct) return;   // Direktstrecken lassen keine Haltestellen entfallen
     const a = vs.findIndex(x => x.id === d.fromId), b = vs.findIndex(x => x.id === d.toId);
     if (a >= 0 && b > a) for (let i = a + 1; i < b; i++) ids[vs[i].id] = true;
   });
@@ -576,8 +579,7 @@ const skippedIds = () => { const r = detourRange(), ids = {}; Object.keys(r).for
 const isClosed = s => detourOn() && (!!user.closed[s.id] || !!skippedIds()[s.id]);
 const routeStops = stops => { const sk = skippedIds(); return stops.filter(s => !(detourOn() && user.closed[s.id]) && !sk[s.id]); };
 const viasAfter = s => {
-  if (!detourOn()) return [];
-  const out = []; activeDetours().forEach(d => { if (d.fromId === s.id) out.push(...d.pts); });
+  const out = []; activeDetours().forEach(d => { if (d.fromId === s.id && (d.direct || detourOn())) out.push(...d.pts); });
   return out;
 };
 const visibleStops = () => line.dirs[dir].stops.filter(s => variant === "lang" || s.isKurzlaeufer);
@@ -870,7 +872,8 @@ function SvgMapView() {
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
-  const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|");
+  const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|")
+    + activeDetours().filter(d => d.direct).map(d => "D" + d.fromId + ">" + d.toId).join("");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
   return ROUTE_PREFIX + stops.length + ":" + h;
 };
@@ -1022,9 +1025,9 @@ function detourPos(d, from, to, st) {
 // Punkte für den Routingdienst: Haltestellen, dazwischen die Umleitungspunkte (und eingebundene Haltestellen in der richtigen Reihenfolge);
 // idx = Position der Haltestellen darin. display=true: angezeigte statt Original-Koordinaten.
 function routePoints(stops, display) {
-  const pts = [], idx = [], c = st => display ? [st.lat, st.lng] : [st.oLat, st.oLng];
+  const pts = [], idx = [], ranges = [], c = st => display ? [st.lat, st.lng] : [st.oLat, st.oLng];
   for (let i = 0; i < stops.length; i++) {
-    const st = stops[i], d = detourOn() ? activeDetours().find(x => x.fromId === st.id) : null;
+    const st = stops[i], d = activeDetours().find(x => x.fromId === st.id && (x.direct || detourOn()));
     const toI = d ? stops.findIndex(x => x.id === d.toId) : -1;
     idx[i] = pts.length; pts.push(c(st));
     if (d && toI > i) {
@@ -1032,10 +1035,28 @@ function routePoints(stops, display) {
       for (let m = i + 1; m < toI; m++) items.push({ key: detourPos(d, st, stops[toI], stops[m]), c: c(stops[m]), m });
       items.sort((a, b) => a.key - b.key);
       items.forEach(it => { if (it.m != null) idx[it.m] = pts.length; pts.push(it.c); });
+      if (d.direct) ranges.push({ a: idx[i], toI });
       i = toI - 1;
     }
   }
-  return { pts, idx };
+  const direct = pts.map(() => false);   // direct[q]: Abschnitt q -> q+1 wird nicht über Straßen geroutet, sondern gerade gezeichnet
+  ranges.forEach(r => { for (let q = r.a; q < idx[r.toI]; q++) direct[q] = true; });
+  return { pts, idx, direct };
+}
+// Ein zusammenhängender Abschnitt über den Routingdienst (Punkte als [lat, lng])
+async function routeRun(points, keep, ctl) {
+  const coords = points.map(c => c[1] + "," + c[0]).join(";");
+  // continue_straight=false: an einer Haltestelle darf gewendet werden (sonst fährt die Route Runden um Häuserblöcke,
+  // wenn der Haltepunkt auf der „falschen“ Seite liegt). Die Wende-Spitzen werden danach von cleanSpurs entfernt.
+  let j = null;
+  for (const extra of ["&continue_straight=false", ""]) {
+    const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
+    j = await r.json();
+    if (r.ok && j.code === "Ok") break;
+  }
+  if (!j || j.code !== "Ok") throw new Error(j && j.code);
+  return { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)]), keep),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
+           legs: j.routes[0].legs.map(l => Math.round(l.distance)) };
 }
 async function ensureRoute(stops) {
   if (await prepareAnchors(stops)) { refresh(false); return; }   // Marker auf echte Haltestellen gesetzt -> neu zeichnen, danach Route
@@ -1049,19 +1070,21 @@ async function ensureRoute(stops) {
     setRouteStatus("Straßenverlauf wird geladen …");
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
     try {
-      const coords = routePoints(stops).pts.map(c => c[1] + "," + c[0]).join(";");
-      // continue_straight=false: an einer Haltestelle darf gewendet werden (sonst fährt die Route Runden um Häuserblöcke,
-      // wenn der Haltepunkt auf der „falschen“ Seite liegt). Die Wende-Spitzen werden danach von cleanSpurs entfernt.
-      let j = null;
-      for (const extra of ["&continue_straight=false", ""]) {
-        const r = await fetch(ROUTE_URL + coords + "?overview=full&geometries=geojson" + extra, { signal: ctl.signal });
-        j = await r.json();
-        if (r.ok && j.code === "Ok") break;
-      }
-      if (!j || j.code !== "Ok") throw new Error(j && j.code);
       const keep = [...stops.filter(s => s.fixed).map(s => [s.oLat, s.oLng]), ...stops.flatMap(s => viasAfter(s).map(v => [v.lat, v.lng]))];
-      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)]), keep),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
-               legs: j.routes[0].legs.map(l => Math.round(l.distance)), t: Date.now() };
+      const rp = routePoints(stops), n = rp.pts.length;
+      let geo = [], legs = [];
+      for (let q = 0; q < n - 1;) {
+        if (rp.direct[q]) {                              // Direktstrecke: gerade Linie, ohne Routing (z. B. Busspur/Einbahnstraße)
+          if (!geo.length) geo.push([+rp.pts[q][0].toFixed(5), +rp.pts[q][1].toFixed(5)]);
+          geo.push([+rp.pts[q + 1][0].toFixed(5), +rp.pts[q + 1][1].toFixed(5)]);
+          legs.push(Math.round(hav({ lat: rp.pts[q][0], lng: rp.pts[q][1] }, { lat: rp.pts[q + 1][0], lng: rp.pts[q + 1][1] }))); q++;
+        } else {
+          let r = q; while (r < n - 1 && !rp.direct[r]) r++;
+          const res = await routeRun(rp.pts.slice(q, r + 1), keep, ctl);
+          geo = geo.concat(res.geo); legs = legs.concat(res.legs); q = r;
+        }
+      }
+      data = { geo, legs, t: Date.now() };
       lsSet(key, JSON.stringify(data)); pruneRoutes(6);
     } catch (e) {
       setRouteStatus("Straßenverlauf nicht verfügbar – Luftlinie");
@@ -1078,7 +1101,7 @@ async function ensureRoute(stops) {
   for (let i = 0; i < stops.length - 1; i++) {
     let d = 0; for (let q = rp.idx[i]; q < rp.idx[i + 1]; q++) d += (data.legs || [])[q] || 0;
     const air = hav({ lat: stops[i].oLat, lng: stops[i].oLng }, { lat: stops[i + 1].oLat, lng: stops[i + 1].oLng });
-    if (rp.idx[i + 1] - rp.idx[i] === 1 && d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
+    if (rp.idx[i + 1] - rp.idx[i] === 1 && !rp.direct[rp.idx[i]] && d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
   }
   setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
   refresh(false);
@@ -1110,7 +1133,7 @@ const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km"
 /* ---------- Umleitung ---------- */
 const stopById = id => allStops().find(x => x.id === id);
 function syncDetourUi() {
-  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false;
+  $("detourOn").checked = detourOn(); $("detourBoth").checked = user.detourBoth !== false; $("drawDirect").checked = !!user.drawDirect;
   $("detourEditBtn").classList.toggle("on", detourEdit);
   $("detourEditBtn").textContent = detourEdit ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
   document.body.classList.toggle("editing", detourEdit);
@@ -1126,7 +1149,7 @@ function syncDetourUi() {
   activeDetours().forEach(d => {
     const src = d.src || d, row = document.createElement("div");
     row.style.margin = "6px 0";
-    row.innerHTML = `🚧 ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
+    row.innerHTML = `${d.direct ? "➡️ Direktstrecke" : "🚧"} ${esc(stopById(d.fromId).name)} → ${esc(stopById(d.toId).name)} (${d.pts.length} Punkte)${d.mirror ? " <i>– aus der Gegenrichtung</i>" : ""} `;
     const btn = document.createElement("button"); btn.type = "button"; btn.textContent = "löschen";
     btn.addEventListener("click", () => removeDetours([src]));
     row.appendChild(btn);
@@ -1167,10 +1190,10 @@ function detourPick(st) {            // Marker im Einzeichnen-Modus angetippt
   else if (st.id !== draft.fromId) {
     const a = vs.findIndex(x => x.id === draft.fromId), b = vs.findIndex(x => x.id === st.id);
     if (b <= a) { $("detourHint").textContent = "Das Ende muss hinter dem Start liegen (in Fahrtrichtung). Tippe eine spätere Haltestelle an."; return; }
-    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false };
+    const nd = { fromId: draft.fromId, toId: st.id, pts: draft.pts, n: ++user.detourSeq, both: user.detourBoth !== false, direct: !!user.drawDirect };
     user.detours.push(nd);
-    draft = null; detourEdit = false; user.detour = true; saveUser();
-    showToast("Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
+    draft = null; detourEdit = false; if (!nd.direct) user.detour = true; saveUser();
+    showToast(nd.direct ? "Direktstrecke gespeichert." : "Umleitung gespeichert.", () => removeDetours([nd], true), "Rückgängig");
   }
   syncDetourUi(); refresh(false);
 }
@@ -1196,10 +1219,11 @@ function undoDetour() {
   showToast("Nichts rückgängig zu machen. Gespeicherte Umleitungen löschst du unter Menü → Umleitung.", () => {}, "OK");
 }
 $("detourBoth").addEventListener("change", () => { user.detourBoth = $("detourBoth").checked; saveUser(); });
+$("drawDirect").addEventListener("change", () => { user.drawDirect = $("drawDirect").checked; saveUser(); });
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
 $("detourEditBtn").addEventListener("click", () => {
   detourEdit = !detourEdit; draft = null;
-  if (detourEdit) { user.detour = true; saveUser(); closeSheet(); }
+  if (detourEdit) { if (!user.drawDirect) user.detour = true; saveUser(); closeSheet(); }
   syncDetourUi(); refresh(false);
 });
 $("editDone").addEventListener("click", () => { detourEdit = false; draft = null; syncDetourUi(); refresh(false); });
@@ -1413,7 +1437,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v15";
+const BUILD = "2026-10-28 · Design v16";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
