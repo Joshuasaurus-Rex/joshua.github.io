@@ -107,6 +107,16 @@
   #live .l-warn { color: #b35c00; font-weight: 700; font-size: .9rem; }
   #live .l-row { display: flex; gap: 8px; margin-top: 4px; }
   #live .l-row button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: .85rem; cursor: pointer; }
+  .lm.closed { background: #c9c9c9; border-color: #777; color: #555; }
+  .stop.closed .stop-name { text-decoration: line-through; opacity: .6; }
+  body.editing #map { cursor: crosshair; }
+  details.detour { font-size: .85rem; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+  details.detour summary { cursor: pointer; font-weight: 700; }
+  details.detour .chk, .fields .chk { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
+  details.detour button { margin-top: 6px; padding: 7px 10px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font: inherit; cursor: pointer; }
+  details.detour button.on { background: #ff9800; border-color: #e65100; font-weight: 700; }
+  details.detour .row { display: flex; gap: 6px; }
+  details.detour p { margin: 6px 0 0; color: var(--muted); }
   #live.alert { background: #ffe3e3; }
   #live.alert .l-warn { color: #b00000; font-size: 1.1rem; }
   #live .l-stats { font-size: .85rem; color: var(--muted); }
@@ -142,6 +152,13 @@
     <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
     <button type="button" class="btn-live" id="liveBtn">📍 Live-Verfolgung starten</button>
     <button type="button" class="btn-live hidden" id="logBtn">📄 Fahrtprotokoll (.txt)</button>
+    <details class="detour" id="detourBox">
+      <summary>🚧 Umleitung / Baustelle</summary>
+      <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv (Karte, Route und Prüfung folgen der Umleitung)</label>
+      <button type="button" id="detourEditBtn">✏ Umleitung auf der Karte einzeichnen</button>
+      <div class="row"><button type="button" id="viaUndo">↩ Letzten Punkt entfernen</button><button type="button" id="viaClear">Alle Punkte löschen</button></div>
+      <p id="detourHint">In der Haltestellenliste kannst du bei einer Haltestelle „entfällt“ ankreuzen.</p>
+    </details>
   </div>
 
   <div id="live" class="hidden" aria-live="polite">
@@ -334,13 +351,13 @@ let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text}, po
 /* ---------- Persistenz ---------- */
 function loadUser() {
   try {
-    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
+    const u = Object.assign({ standzeit: {}, fahrerNotiz: {}, pos: {}, vias: {}, closed: {}, viaSeq: 0, detour: false }, JSON.parse(localStorage.getItem(STORE_KEY)) || {});
     // alte IDs „5194-0“ (Nummer-Index) -> „5194“, damit gespeicherte Notizen die Haltestelle behalten
     ["standzeit", "fahrerNotiz", "pos"].forEach(f => {
       const o = {}; Object.keys(u[f] || {}).forEach(k => { o[k.replace(/^(r?\d+)-\d+$/, "$1")] = u[f][k]; }); u[f] = o;
     });
     return u;
-  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {} }; }
+  } catch (e) { return { standzeit: {}, fahrerNotiz: {}, pos: {}, vias: {}, closed: {}, viaSeq: 0, detour: false }; }
 }
 // Von Hand korrigierte Markerpositionen anwenden (aus dem Browser-Speicher)
 const allStops = () => [...line.dirs.hin.stops, ...line.dirs.rueck.stops];
@@ -361,6 +378,12 @@ const getStand = s => (s.id in user.standzeit ? user.standzeit[s.id] : s.standze
 const hasStand = s => getStand(s).trim() !== "";
 const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Summe
 const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
+// Umleitung: Haltestellen können entfallen, zusätzliche Punkte (Vias) lenken die Route
+const detourOn = () => !!user.detour;
+const isClosed = s => detourOn() && !!user.closed[s.id];
+const routeStops = stops => stops.filter(s => !isClosed(s));
+const viasAfter = s => (detourOn() && user.vias[s.id]) || [];
+let detourEdit = false;
 const visibleStops = () => line.dirs[dir].stops.filter(s => variant === "lang" || s.isKurzlaeufer);
 const dwellText = s => `${getStand(s).trim()} Standzeit`;
 const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -372,7 +395,7 @@ function renderList() {
   ol.innerHTML = "";
   stops.forEach((s, i) => {
     const li = document.createElement("li");
-    li.className = "stop" + (s.id === selectedId ? " selected" : "");
+    li.className = "stop" + (s.id === selectedId ? " selected" : "") + (isClosed(s) ? " closed" : "");
     li.dataset.id = s.id;
     li.innerHTML = `
       <div class="stop-head">
@@ -388,6 +411,7 @@ function renderList() {
         <label>Fahrer-Notiz
           <textarea rows="2" data-f="fahrerNotiz" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
         </label>
+        <label class="chk"><input type="checkbox" data-closed="1" ${user.closed[s.id] ? "checked" : ""}> 🚧 Haltestelle entfällt (bei aktiver Umleitung)</label>
         <div class="hint">📍 Marker falsch? Den Marker dieser Haltestelle auf der Karte an die richtige Stelle ziehen.
           ${s.fixed ? '<button type="button" data-reset="1">Position zurücksetzen</button>' : ""}</div>
       </div>`;
@@ -395,6 +419,10 @@ function renderList() {
     ol.appendChild(li);
   });
 
+  ol.querySelectorAll("[data-closed]").forEach(c => {
+    c.addEventListener("click", e => e.stopPropagation());
+    c.addEventListener("change", () => { const id = c.closest(".stop").dataset.id; user.closed[id] = c.checked; if (c.checked) user.detour = true; saveUser(); syncDetourUi(); refresh(false); });
+  });
   ol.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); resetStop(b.closest(".stop").dataset.id); }));
   // Eingaben speichern
   ol.querySelectorAll("[data-f]").forEach(el => {
@@ -437,7 +465,7 @@ function refresh(fit = true) {
   }
   if (mapView) mapView.render(stops, selectedId, fit);
   if (live.on && live.pos) updateLive();
-  ensureRoute(stops);
+  ensureRoute(routeStops(stops));
 }
 
 /* ---------- Toggle ---------- */
@@ -465,15 +493,17 @@ function updateTitle() {
 /* ---------- Export (.txt) ---------- */
 document.getElementById("exportBtn").addEventListener("click", () => {
   const stops = visibleStops();
-  const total = stops.reduce((a, s) => a + getDwell(s), 0);
+  const total = stops.reduce((a, s) => isClosed(s) ? a : a + getDwell(s), 0);
   const L = [];
   L.push(`BOGESTRA – ${line.title} – ${line.dirs[dir].label} (${line.dirs[dir].desc}) – ${line.variants[variant].label} (${line.variants[variant].desc})`);
   L.push(`Erstellt am: ${new Date().toLocaleString("de-DE")}`);
-  L.push(`Haltestellen: ${stops.length}   |   Standzeit gesamt: ${total} Min.`);
+  L.push(`Haltestellen: ${routeStops(stops).length}   |   Standzeit gesamt: ${total} Min.`);
+  if (detourOn()) L.push(`*** UMLEITUNG AKTIV – entfallene Haltestellen: ${stops.length - routeStops(stops).length} ***`);
   L.push("=".repeat(60), "");
   stops.forEach((s, i) => {
     const isLast = i === stops.length - 1;
     L.push(`${String(i + 1).padStart(2, "0")}. ${s.name}`);
+    if (isClosed(s)) { L.push("    *** ENTFÄLLT (Umleitung) ***"); if (!isLast) L.push("    |", "    v"); return; }
     if (hasStand(s)) L.push(`    >>> STANDZEIT: ${getDwell(s)} Min. <<<`);
     if (getStopNote(s).trim()) L.push(`    Fahrer-Notiz: ${getStopNote(s).trim().replace(/\n/g, "\n                  ")}`);
     if (!isLast) {
@@ -499,10 +529,11 @@ function LeafletView() {
     maxZoom: 19, attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>-Mitwirkende"
   }).addTo(map);
   const layer = L.layerGroup().addTo(map);
+  map.on("click", e => { if (detourEdit) addVia(e.latlng.lat, e.latlng.lng); });
   let byId = {}, order = [], me = null;
 
-  const icon = (n, sel) => L.divIcon({
-    className: "", html: `<div class="lm${sel ? " sel" : ""}">${n}</div>`,
+  const icon = (n, sel, closed) => L.divIcon({
+    className: "", html: `<div class="lm${sel ? " sel" : ""}${closed ? " closed" : ""}">${n}</div>`,
     iconSize: sel ? [32, 32] : [26, 26], iconAnchor: sel ? [16, 16] : [13, 13]
   });
   const popup = (s, i) => `<div style="font-family:system-ui;max-width:220px"><b>${i + 1}. ${esc(s.name)}</b>` +
@@ -513,14 +544,15 @@ function LeafletView() {
     render(stops, sel, fit) {
       layer.clearLayers(); byId = {}; order = stops;
       const pts = stops.map(s => [s.lat, s.lng]);
-      L.polyline(routePts(stops), { color: "#00539f", weight: 5, opacity: .9 }).addTo(layer);
+      L.polyline(routePts(routeStops(stops)), { color: detourOn() ? "#e65100" : "#00539f", weight: 5, opacity: .9 }).addTo(layer);
+      routeStops(stops).forEach(s => viasAfter(s).forEach(v => L.circleMarker([v.lat, v.lng], { radius: 7, color: "#7a3600", weight: 2, fillColor: "#ff9800", fillOpacity: 1 }).bindTooltip("Umleitungspunkt").addTo(layer)));
       stops.forEach((s, i) => {
-        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name, draggable: s.id === sel })
+        const m = L.marker([s.lat, s.lng], { icon: icon(i + 1, s.id === sel, isClosed(s)), zIndexOffset: s.id === sel ? 1000 : 0, title: s.name, draggable: s.id === sel })
           .bindPopup(popup(s, i)).addTo(layer);
         m.on("click", () => select(s.id));
         m.on("dragend", () => { const ll = m.getLatLng(); moveStop(s, ll.lat, ll.lng); });
         byId[s.id] = m;
-        if (hasStand(s)) {
+        if (hasStand(s) && !isClosed(s)) {
           L.marker([s.lat, s.lng], {
             interactive: false, zIndexOffset: 500,
             icon: L.divIcon({ className: "", html: `<div class="lm-dwell">${esc(dwellText(s))}</div>`, iconSize: [0, 0], iconAnchor: [-18, -2] })
@@ -532,7 +564,7 @@ function LeafletView() {
     },
     select(id, opts) {
       const m = byId[id]; if (!m) return;
-      order.forEach((s, i) => { const mk = byId[s.id]; if (!mk) return; mk.setIcon(icon(i + 1, s.id === id)).setZIndexOffset(s.id === id ? 1000 : 0); s.id === id ? mk.dragging.enable() : mk.dragging.disable(); });
+      order.forEach((s, i) => { const mk = byId[s.id]; if (!mk) return; mk.setIcon(icon(i + 1, s.id === id, isClosed(s))).setZIndexOffset(s.id === id ? 1000 : 0); s.id === id ? mk.dragging.enable() : mk.dragging.disable(); });
       m.openPopup();
       map.panTo(m.getLatLng());
     },
@@ -622,7 +654,7 @@ function SvgMapView() {
 const ROUTE_URL = "https://router.project-osrm.org/route/v1/driving/";
 const routeCache = {}, routeBusy = {};
 const routeKey = stops => {
-  const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng).join("|");
+  const str = stops.map(s => s.id + "@" + s.oLat + "," + s.oLng + viasAfter(s).map(v => "v" + v.lat.toFixed(5) + "," + v.lng.toFixed(5)).join("")).join("|");
   let h = 0; for (let i = 0; i < str.length; i++) h = (h * 31 + str.charCodeAt(i)) | 0;
   return "bogestra-route-v4:" + stops.length + ":" + h;
 };
@@ -727,7 +759,6 @@ function snapToLine(stops, geo) {
   const X = c => c[1] * k * M, Y = c => c[0] * M;
   let last = 0;
   stops.forEach(st => {
-    if (st.fixed) return;
     const px = st.oLng * k * M, py = st.oLat * M;
     let best = null;
     for (let j = last; j < geo.length - 1 && j < last + 800; j++) {
@@ -736,14 +767,24 @@ function snapToLine(stops, geo) {
       const d = Math.hypot(px - (ax + t * bx), py - (ay + t * by));
       if (!best || d < best.d) best = { d, j, t };
     }
+    if (best) st.lineIdx = best.j;
     if (best && best.d < 150) {
       const A = geo[best.j], B = geo[best.j + 1];
-      st.lat = A[0] + (B[0] - A[0]) * best.t; st.lng = A[1] + (B[1] - A[1]) * best.t;
+      if (!st.fixed) { st.lat = A[0] + (B[0] - A[0]) * best.t; st.lng = A[1] + (B[1] - A[1]) * best.t; }
       last = best.j;
     }
   });
 }
 
+// Punkte für den Routingdienst: Haltestellen mit eingeschobenen Umleitungspunkten; idx = Position der Haltestellen darin
+function routePoints(stops) {
+  const pts = [], idx = [];
+  stops.forEach((s, i) => {
+    idx.push(pts.length); pts.push([s.oLng, s.oLat]);
+    if (i < stops.length - 1) viasAfter(s).forEach(v => pts.push([v.lng, v.lat]));
+  });
+  return { pts, idx };
+}
 async function ensureRoute(stops) {
   if (await prepareAnchors(stops)) { refresh(false); return; }   // Marker auf echte Haltestellen gesetzt -> neu zeichnen, danach Route
   const key = routeKey(stops);
@@ -756,7 +797,7 @@ async function ensureRoute(stops) {
     setRouteStatus("Straßenverlauf wird geladen …");
     const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 25000);
     try {
-      const coords = stops.map(s => s.oLng + "," + s.oLat).join(";");
+      const coords = routePoints(stops).pts.map(c => c.join(",")).join(";");
       // continue_straight=false: an einer Haltestelle darf gewendet werden (sonst fährt die Route Runden um Häuserblöcke,
       // wenn der Haltepunkt auf der „falschen“ Seite liegt). Die Wende-Spitzen werden danach von cleanSpurs entfernt.
       let j = null;
@@ -781,10 +822,12 @@ async function ensureRoute(stops) {
   snapToLine(stops, data.geo);
   // Auffällige Abschnitte (Umweg/Schleife/Doppelweg) melden
   const odd = [];
-  (data.legs || []).forEach((d, i) => {
+  const rp = routePoints(stops);
+  for (let i = 0; i < stops.length - 1; i++) {
+    let d = 0; for (let q = rp.idx[i]; q < rp.idx[i + 1]; q++) d += (data.legs || [])[q] || 0;
     const air = hav({ lat: stops[i].oLat, lng: stops[i].oLng }, { lat: stops[i + 1].oLat, lng: stops[i + 1].oLng });
-    if (d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
-  });
+    if (!viasAfter(stops[i]).length && d > Math.max(2.5 * air, air + 300)) odd.push(`${i + 1}→${i + 2}`);
+  }
   setRouteStatus(odd.length ? `Straßenverlauf geladen – ⚠ auffällig: ${odd.join(", ")} (Marker prüfen/verschieben)` : "Straßenverlauf: OpenStreetMap-Routing");
   refresh(false);
 }
@@ -810,6 +853,43 @@ function segInfo(pt, a, b) {
   return { t, d: Math.hypot(px - t * bx, py - t * by) };
 }
 const fmtDist = m => m >= 1000 ? (m / 1000).toFixed(1).replace(".", ",") + " km" : Math.round(m / 10) * 10 + " m";
+
+/* ---------- Umleitung ---------- */
+function syncDetourUi() {
+  $("detourOn").checked = detourOn();
+  $("detourEditBtn").classList.toggle("on", detourEdit);
+  $("detourEditBtn").textContent = detourEdit ? "✔ Fertig (Einzeichnen beenden)" : "✏ Umleitung auf der Karte einzeichnen";
+  document.body.classList.toggle("editing", detourEdit);
+  $("detourHint").textContent = detourEdit
+    ? "Tippe auf der Karte nacheinander Punkte entlang der Umleitung, in Fahrtrichtung. Die App verbindet sie über die Straßen."
+    : "In der Haltestellenliste kannst du bei einer Haltestelle „entfällt“ ankreuzen.";
+}
+function addVia(lat, lng) {
+  const stops = routeStops(visibleStops()); if (stops.length < 2) return;
+  const geo = routeCache[routeKey(stops)];
+  let leg = 0;
+  if (geo && stops.every(s => s.lineIdx != null)) {          // Abschnitt über den nächsten Punkt der Linie bestimmen
+    let bj = 0, bd = Infinity, k = Math.cos(lat * Math.PI / 180);
+    geo.forEach((c, j) => { const d = Math.hypot(c[0] - lat, (c[1] - lng) * k); if (d < bd) { bd = d; bj = j; } });
+    for (let i = 0; i < stops.length - 1; i++) if (stops[i].lineIdx <= bj) leg = i;
+  } else {
+    let bd = Infinity;
+    for (let i = 0; i < stops.length - 1; i++) { const d = segInfo({ lat, lng }, stops[i], stops[i + 1]).d; if (d < bd) { bd = d; leg = i; } }
+  }
+  const id = stops[leg].id;
+  (user.vias[id] = user.vias[id] || []).push({ lat, lng, n: ++user.viaSeq });
+  user.detour = true; saveUser(); syncDetourUi(); refresh(false);
+}
+function removeLastVia() {
+  let last = null;
+  line.dirs[dir].stops.forEach(st => (user.vias[st.id] || []).forEach((v, i) => { if (!last || v.n > last.v.n) last = { id: st.id, i, v }; }));
+  if (!last) return;
+  user.vias[last.id].splice(last.i, 1); saveUser(); refresh(false);
+}
+$("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
+$("detourEditBtn").addEventListener("click", () => { detourEdit = !detourEdit; if (detourEdit) user.detour = true, saveUser(); syncDetourUi(); if (detourEdit) refresh(false); });
+$("viaUndo").addEventListener("click", removeLastVia);
+$("viaClear").addEventListener("click", () => { line.dirs[dir].stops.forEach(st => delete user.vias[st.id]); saveUser(); refresh(false); });
 
 /* ---------- Routen-Überwachung ---------- */
 const fmtTime = t => new Date(t).toLocaleTimeString("de-DE");
@@ -872,7 +952,7 @@ function monitor(stops, pos, best, nextIdx) {
 }
 
 function updateLive() {
-  const stops = visibleStops(), pos = live.pos;
+  const stops = routeStops(visibleStops()), pos = live.pos;
   if (!pos || stops.length < 2) return;
   // nächstgelegener Streckenabschnitt (Rückwärtssprünge leicht bestraft)
   let best = null;
@@ -989,6 +1069,7 @@ function useLeaflet() {
 
 /* Start */
 if (dir === "rueck") { document.getElementById("dirToggle").dataset.dir = "rueck"; document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === "rueck"))); }
+syncDetourUi();
 updateTitle();
 if (window.L) useLeaflet(); else useSvg();   // Leaflet nicht ladbar (offline) -> SVG-Ersatzkarte
 </script>
