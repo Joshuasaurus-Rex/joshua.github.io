@@ -959,9 +959,13 @@ function prepareAnchors(stops) {
 
 // Entfernt „Sackgassen“-Schleifen: Die Route fährt in eine Nebenstraße hinein und auf demselben Weg zurück
 // (entsteht, wenn eine Haltestelle auf die falsche Straße gesnappt wird). Echte Schleifen/Kreisel bleiben.
-function cleanSpurs(geo) {
+// keep: Punkte, die nie wegbereinigt werden dürfen (von Hand gesetzte Haltestellen, Umleitungspunkte): liegt einer in einem Stummel,
+// ist das Stummelstück gewollt (z. B. verlegte Haltestelle in einer Seitenstraße) und bleibt in der Linie.
+function cleanSpurs(geo, keep) {
   const k = Math.cos(geo[0][0] * Math.PI / 180), M = 111320;
   const P = geo.map(c => [c[1] * k * M, c[0] * M]);
+  const K = (keep || []).map(c => [c[1] * k * M, c[0] * M]);
+  const holdsKeep = (a, b) => { for (let q = a; q <= b; q++) for (const c of K) if (Math.hypot(P[q][0] - c[0], P[q][1] - c[1]) < 40) return true; return false; };
   const out = [];
   let i = 0;
   while (i < geo.length) {
@@ -974,7 +978,7 @@ function cleanSpurs(geo) {
         let a = 0;
         for (let q = i; q < j; q++) a += P[q][0] * P[q + 1][1] - P[q + 1][0] * P[q][1];
         a = Math.abs(a + P[j][0] * P[i][1] - P[i][0] * P[j][1]) / 2;
-        if (a < 0.05 * len * len) { jump = j; break; }
+        if (a < 0.05 * len * len && !holdsKeep(i + 1, j - 1)) { jump = j; break; }
       }
     }
     i = jump > 0 ? jump : i + 1;
@@ -1054,7 +1058,8 @@ async function ensureRoute(stops) {
         if (r.ok && j.code === "Ok") break;
       }
       if (!j || j.code !== "Ok") throw new Error(j && j.code);
-      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)])),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
+      const keep = [...stops.filter(s => s.fixed).map(s => [s.oLat, s.oLng]), ...stops.flatMap(s => viasAfter(s).map(v => [v.lat, v.lng]))];
+      data = { geo: cleanSpurs(j.routes[0].geometry.coordinates.map(c => [+c[1].toFixed(5), +c[0].toFixed(5)]), keep),   // 5 Nachkommastellen ≈ 1 m, spart Speicher
                legs: j.routes[0].legs.map(l => Math.round(l.distance)), t: Date.now() };
       lsSet(key, JSON.stringify(data)); pruneRoutes(6);
     } catch (e) {
@@ -1407,7 +1412,7 @@ function syncToggles() {
 const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
 function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
 function hideStart() { $("start").classList.add("hidden"); mapResize(); }
-const BUILD = "2026-10-28 · Design v13";
+const BUILD = "2026-10-28 · Design v14";
 function memStats() {
   let user = 0, cache = 0, other = 0, n = 0;
   try {
