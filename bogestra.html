@@ -715,6 +715,28 @@ function cleanSpurs(geo) {
   return out;
 }
 
+function snapToLine(stops, geo) {
+  const k = Math.cos(geo[0][0] * Math.PI / 180), M = 111320;
+  const X = c => c[1] * k * M, Y = c => c[0] * M;
+  let last = 0;
+  stops.forEach(st => {
+    if (st.fixed) return;
+    const px = st.oLng * k * M, py = st.oLat * M;
+    let best = null;
+    for (let j = last; j < geo.length - 1 && j < last + 800; j++) {
+      const ax = X(geo[j]), ay = Y(geo[j]), bx = X(geo[j + 1]) - ax, by = Y(geo[j + 1]) - ay, len2 = bx * bx + by * by;
+      const t = len2 ? Math.max(0, Math.min(1, ((px - ax) * bx + (py - ay) * by) / len2)) : 0;
+      const d = Math.hypot(px - (ax + t * bx), py - (ay + t * by));
+      if (!best || d < best.d) best = { d, j, t };
+    }
+    if (best && best.d < 150) {
+      const A = geo[best.j], B = geo[best.j + 1];
+      st.lat = A[0] + (B[0] - A[0]) * best.t; st.lng = A[1] + (B[1] - A[1]) * best.t;
+      last = best.j;
+    }
+  });
+}
+
 async function ensureRoute(stops) {
   if (await prepareAnchors(stops)) { refresh(false); return; }   // Marker auf echte Haltestellen gesetzt -> neu zeichnen, danach Route
   const key = routeKey(stops);
@@ -748,11 +770,8 @@ async function ensureRoute(stops) {
     delete routeBusy[key];
   }
   routeCache[key] = data.geo;
-  // Haltestellen auf die Straße setzen (nur kleine Korrekturen, sonst Original behalten)
-  stops.forEach((st, i) => {
-    const w = data.wps[i];
-    if (w && !st.fixed && hav({ lat: st.oLat, lng: st.oLng }, { lat: w[0], lng: w[1] }) < 50) { st.lat = w[0]; st.lng = w[1]; }
-  });
+  // Marker auf die gezeichnete Linie setzen (nächster Linienpunkt, in Fahrtrichtung fortlaufend gesucht), damit Marker und Linie übereinstimmen
+  snapToLine(stops, data.geo);
   // Auffällige Abschnitte (Umweg/Schleife/Doppelweg) melden
   const odd = [];
   (data.legs || []).forEach((d, i) => {
