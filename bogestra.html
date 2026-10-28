@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BOGESTRA Routen-Lernhilfe</title>
+<style>
+  :root {
+    --blue: #00539f;
+    --blue-dark: #003a70;
+    --yellow: #ffd400;
+    --red: #d10000;
+    --bg: #f2f4f7;
+    --card: #ffffff;
+    --line: #d5dbe3;
+    --text: #1b2430;
+    --muted: #5d6b7c;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    color: var(--text); background: var(--bg);
+    display: grid; grid-template-columns: minmax(340px, 440px) 1fr; grid-template-rows: 100%;
+  }
+
+  /* ---------- Seitenleiste ---------- */
+  aside { display: flex; flex-direction: column; min-height: 0; background: var(--card); border-right: 1px solid var(--line); }
+  header { background: var(--blue); color: #fff; padding: 14px 16px 12px; }
+  header h1 { margin: 0; font-size: 1.05rem; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
+  .badge { background: var(--yellow); color: #111; font-weight: 800; font-size: 1.3rem; padding: 2px 12px; border-radius: 8px; }
+  header .sub { margin-top: 6px; font-size: .85rem; opacity: .85; }
+
+  .controls { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
+
+  /* Toggle Langläufer / Kurzläufer */
+  .toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #e3e8ee; border-radius: 12px; padding: 4px; }
+  .toggle::before {
+    content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
+    background: var(--blue); border-radius: 9px; transition: transform .3s ease;
+  }
+  .toggle[data-variant="kurz"]::before { transform: translateX(100%); }
+  .toggle button {
+    position: relative; z-index: 1; border: 0; background: none; padding: 10px 6px; font: inherit; font-weight: 700;
+    color: var(--muted); cursor: pointer; transition: color .3s; border-radius: 9px; line-height: 1.2;
+  }
+  .toggle button small { display: block; font-weight: 400; font-size: .72rem; }
+  .toggle button[aria-pressed="true"] { color: #fff; }
+
+  .btn-export {
+    border: 0; border-radius: 12px; padding: 13px 14px; font: inherit; font-weight: 800; font-size: 1rem;
+    background: var(--yellow); color: #111; cursor: pointer; box-shadow: 0 2px 0 #b89b00;
+  }
+  .btn-export:hover { filter: brightness(1.05); }
+  .btn-export:active { transform: translateY(1px); box-shadow: none; }
+
+  details.keybox { font-size: .82rem; color: var(--muted); }
+  details.keybox summary { cursor: pointer; }
+  details.keybox .row { display: flex; gap: 6px; margin-top: 6px; }
+  details.keybox input { flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; font: inherit; }
+  details.keybox button { padding: 6px 10px; border: 1px solid var(--line); background: #fff; border-radius: 6px; cursor: pointer; font: inherit; }
+  #mapStatus { margin: 6px 0 0; }
+
+  /* Haltestellenliste */
+  .summary { padding: 8px 16px; font-size: .85rem; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
+  ol#stops { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
+  .stop { border-bottom: 1px solid var(--line); padding: 10px 16px; cursor: pointer; animation: fadeIn .35s ease; }
+  .stop.selected { background: #fff9d6; box-shadow: inset 4px 0 0 var(--yellow); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .stop-head { display: flex; align-items: center; gap: 10px; }
+  .num {
+    flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--yellow); border: 2px solid #333;
+    display: grid; place-items: center; font-weight: 800; font-size: .8rem;
+  }
+  .stop-name { font-weight: 700; flex: 1; }
+  .dwell { color: var(--red); font-weight: 800; font-size: .9rem; white-space: nowrap; }
+  .fields { display: none; margin-top: 8px; gap: 8px; }
+  .stop.selected .fields { display: grid; }
+  .fields label { font-size: .75rem; color: var(--muted); display: grid; gap: 3px; }
+  .fields textarea, .fields input[type="text"] {
+    width: 100%; font: inherit; font-size: .9rem; font-weight: 400; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical;
+  }
+  .fields input[type="text"] { width: 100%; }
+  .seg-label { color: var(--blue-dark) !important; font-weight: 700; }
+  /* Kompakte Vorschau der Notizen bei nicht gewählten Haltestellen */
+  .peek { margin: 4px 0 0 38px; font-size: .8rem; color: var(--muted); }
+  .stop.selected .peek { display: none; }
+  .peek b { color: var(--blue-dark); }
+
+  /* ---------- Karte ---------- */
+  main { position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; }
+  #svgmap { position: absolute; inset: 0; width: 100%; height: 100%; background: #eaf0e4; }
+  .svg-note { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
+  .svg-info { position: absolute; left: 10px; top: 10px; background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
+  .svg-info .st { color: var(--red); font-weight: 800; }
+  .hidden { display: none !important; }
+
+  @media (max-width: 760px) {
+    body { grid-template-columns: 1fr; grid-template-rows: 42vh 1fr; }
+    main { order: -1; }
+    aside { border-right: 0; }
+  }
+</style>
+</head>
+<body>
+
+<aside>
+  <header>
+    <h1><span class="badge">390</span> BOGESTRA Routen-Lernhilfe</h1>
+    <div class="sub" id="lineTitle"></div>
+  </header>
+
+  <div class="controls">
+    <div class="toggle" id="toggle" data-variant="lang" role="group" aria-label="Streckenvariante">
+      <button type="button" data-variant="lang" aria-pressed="true">Langläufer<small>gesamte Strecke</small></button>
+      <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
+    </div>
+    <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
+    <details class="keybox" id="keybox">
+      <summary>Google-Maps-API-Schlüssel</summary>
+      <div class="row">
+        <input id="apiKey" type="text" placeholder="API-Key eintragen" autocomplete="off">
+        <button type="button" id="saveKey">Laden</button>
+      </div>
+      <p id="mapStatus"></p>
+    </details>
+  </div>
+
+  <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
+  <ol id="stops"></ol>
+</aside>
+
+<main>
+  <div id="map" class="hidden"></div>
+  <svg id="svgmap" xmlns="http://www.w3.org/2000/svg"></svg>
+  <div class="svg-info hidden" id="svgInfo"></div>
+  <div class="svg-note" id="svgNote">Schematische Ersatzkarte – für die echte Google-Karte links unter „Google-Maps-API-Schlüssel“ einen Key eintragen.</div>
+</main>
+
+<!--
+  HALTESTELLEN-DATEN Linie 390 (JSON) – hier die echten VRR-Daten eintragen.
+  Reihenfolge im Array = Fahrtrichtung. Pflicht: name, lat, lng.
+  Optional:
+    stopNr         VRR-Haltestellennummer (STOP_NR aus der Stammdaten-CSV)
+    standzeit      z. B. "5 Min"  -> wird am Marker in ROT angezeigt
+    fahrerNotiz    z. B. "Nach der Ampel rechts am Lidl" -> Info-Fenster
+    isKurzlaeufer  true = Haltestelle ist auch Teil der Kurzläufer-Route
+  QUELLE: Linienband/Fahrplan 390 (Bochum Linden Mitte -> Herne Bf, Richtung Herne), Koordinaten
+  aus den VRR-Haltestellen-Stammdaten (STOP_NR). Standzeiten und Fahrer-Notizen stehen nicht im
+  Fahrplan und sind leer – in der App (Liste links) oder hier im JSON eintragen.
+  ANNAHME Kurzläufer: Fahrten, die ab Bochum Birkenfeldstr. starten (z. B. 4.36 / 5.06 Uhr, Mo-Fr).
+  Anpassen über isKurzlaeufer.
+-->
+<script type="application/json" id="haltestellen-390">
+[
+  { "stopNr": 5290, "name": "Bochum Linden Mitte", "lat": 51.42627, "lng": 7.16112, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5596, "name": "Bochum Halfmannswiese", "lat": 51.43227, "lng": 7.16092, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 6749, "name": "Bochum Am Sattelgut", "lat": 51.43343, "lng": 7.16227, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5260, "name": "Bochum Scharpenseelstr.", "lat": 51.44065, "lng": 7.15823, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5228, "name": "Bochum Zollstr.", "lat": 51.44442, "lng": 7.16035, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5027, "name": "Bochum Elchweg", "lat": 51.45059, "lng": 7.14753, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5115, "name": "Bochum Mattenburg", "lat": 51.4565, "lng": 7.15362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5504, "name": "Bochum Höntrop", "lat": 51.46027, "lng": 7.15463, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5366, "name": "Bochum Höntrop Kirche", "lat": 51.46405, "lng": 7.15199, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5882, "name": "Bochum Ridderstr.", "lat": 51.46862, "lng": 7.14553, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5114, "name": "Bochum Lohackerstr.", "lat": 51.4718, "lng": 7.14497, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5264, "name": "Bochum August-Bebel-Platz", "lat": 51.48062, "lng": 7.13877, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5168, "name": "Bochum Freiheitstr.", "lat": 51.48255, "lng": 7.13489, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5823, "name": "Bochum Hüller Str.", "lat": 51.48938, "lng": 7.13857, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": false },
+  { "stopNr": 5267, "name": "Bochum Birkenfeldstr.", "lat": 51.49614, "lng": 7.13862, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5202, "name": "Bochum Ulrichstr.", "lat": 51.49485, "lng": 7.14605, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5487, "name": "Bochum Röhlinghauser Str.", "lat": 51.5037, "lng": 7.15844, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7615, "name": "Herne Röhlinghausen Kirche", "lat": 51.5128, "lng": 7.15254, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 6784, "name": "Herne Röhlinghausen Markt", "lat": 51.51308, "lng": 7.15475, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5737, "name": "Herne Königsgruber Str.", "lat": 51.51251, "lng": 7.16088, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5717, "name": "Herne Eickeler Bruch", "lat": 51.51166, "lng": 7.16514, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5713, "name": "Herne Dahlhauser Str.", "lat": 51.50782, "lng": 7.16902, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5720, "name": "Herne Eickel Ev. Krankenhaus", "lat": 51.51146, "lng": 7.17694, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5705, "name": "Herne Auf der Wenge", "lat": 51.51317, "lng": 7.17895, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5718, "name": "Herne Eickeler Markt", "lat": 51.51477, "lng": 7.18002, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7584, "name": "Herne Dorneburger Str.", "lat": 51.52226, "lng": 7.18043, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5715, "name": "Herne Dorstener Str.", "lat": 51.53073, "lng": 7.18636, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5751, "name": "Herne Zeche Julia", "lat": 51.53747, "lng": 7.19118, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5710, "name": "Herne Buschkampstr.", "lat": 51.53866, "lng": 7.19981, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5726, "name": "Herne An der Ziegelei", "lat": 51.53726, "lng": 7.20346, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5210, "name": "Herne Gertrudenplatz", "lat": 51.53842, "lng": 7.21362, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 5003, "name": "Herne Rathaus", "lat": 51.53872, "lng": 7.2195, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7502, "name": "Herne Mitte", "lat": 51.54071, "lng": 7.22098, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  },
+  { "stopNr": 7501, "name": "Herne Bf", "lat": 51.54436, "lng": 7.21681, "standzeit": "", "fahrerNotiz": "", "isKurzlaeufer": true  }
+]
+</script>
+
+<script>
+const ACTIVE_LINE = "390";   // Startkonfiguration
+const line = {
+  title: "Linie " + ACTIVE_LINE,
+  variants: {
+    lang: { label: "Langläufer", desc: "gesamte Strecke" },
+    kurz: { label: "Kurzläufer", desc: "verkürzte Strecke" }
+  },
+  // JSON einlesen; optionale Felder mit Defaults auffüllen
+  stops: JSON.parse(document.getElementById("haltestellen-" + ACTIVE_LINE).textContent).map((s, i) => ({
+    id: String(s.stopNr != null ? s.stopNr : "idx" + i) + "-" + i,
+    name: s.name, lat: s.lat, lng: s.lng,
+    standzeit: s.standzeit || "",
+    fahrerNotiz: s.fahrerNotiz || "",
+    isKurzlaeufer: s.isKurzlaeufer === true
+  }))
+};
+
+const STORE_KEY = "bogestra-lernhilfe-v2";
+const KEY_STORE = "bogestra-gmaps-key";
+
+let variant = "lang";
+let selectedId = null;
+let mapView = null;
+let user = loadUser();   // { standzeit: {id: text}, fahrerNotiz: {id: text} }
+
+/* ---------- Persistenz ---------- */
+function loadUser() {
+  try { return Object.assign({ standzeit: {}, fahrerNotiz: {} }, JSON.parse(localStorage.getItem(STORE_KEY)) || {}); }
+  catch (e) { return { standzeit: {}, fahrerNotiz: {} }; }
+}
+function saveUser() { try { localStorage.setItem(STORE_KEY, JSON.stringify(user)); } catch (e) {} }
+
+/* ---------- Abgeleitete Daten ---------- */
+const getStand = s => (s.id in user.standzeit ? user.standzeit[s.id] : s.standzeit) || "";
+const hasStand = s => getStand(s).trim() !== "";
+const getDwell = s => parseInt(getStand(s), 10) || 0;   // Minuten, für die Summe
+const getStopNote = s => (s.id in user.fahrerNotiz ? user.fahrerNotiz[s.id] : s.fahrerNotiz) || "";
+const visibleStops = () => line.stops.filter(s => variant === "lang" || s.isKurzlaeufer);
+const dwellText = s => `${getStand(s).trim()} Standzeit`;
+const esc = t => String(t).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+/* ---------- Liste ---------- */
+function renderList() {
+  const stops = visibleStops();
+  const ol = document.getElementById("stops");
+  ol.innerHTML = "";
+  stops.forEach((s, i) => {
+    const li = document.createElement("li");
+    li.className = "stop" + (s.id === selectedId ? " selected" : "");
+    li.dataset.id = s.id;
+    li.innerHTML = `
+      <div class="stop-head">
+        <span class="num">${i + 1}</span>
+        <span class="stop-name">${esc(s.name)}</span>
+        ${hasStand(s) ? `<span class="dwell">${esc(dwellText(s))}</span>` : ""}
+      </div>
+      ${getStopNote(s) ? `<div class="peek">📝 ${esc(getStopNote(s))}</div>` : ""}
+      <div class="fields">
+        <label>Standzeit (z. B. „5 Min“)
+          <input type="text" value="${esc(getStand(s))}" data-f="standzeit" placeholder="leer = keine Standzeit">
+        </label>
+        <label>Fahrer-Notiz
+          <textarea rows="2" data-f="fahrerNotiz" placeholder="z. B. am Lidl rechts abbiegen">${esc(getStopNote(s))}</textarea>
+        </label>
+      </div>`;
+    li.addEventListener("click", () => select(s.id, { fromList: true }));
+    ol.appendChild(li);
+  });
+
+  // Eingaben speichern
+  ol.querySelectorAll("[data-f]").forEach(el => {
+    const id = el.closest(".stop").dataset.id, f = el.dataset.f;
+    el.addEventListener("click", e => e.stopPropagation());
+    el.addEventListener("input", () => { user[f][id] = el.value; saveUser(); updateSummary(); });
+    el.addEventListener("change", () => {
+      if (f === "standzeit" && /^\d+$/.test(el.value.trim())) { user[f][id] = el.value.trim() + " Min"; saveUser(); }
+      refresh(false);
+    });
+  });
+  updateSummary();
+}
+
+function updateSummary() {
+  const stops = visibleStops();
+  const total = stops.reduce((a, s) => a + getDwell(s), 0);
+  document.getElementById("countInfo").textContent = `${stops.length} Haltestellen`;
+  document.getElementById("dwellInfo").textContent = `Standzeit gesamt: ${total} Min.`;
+}
+
+/* ---------- Auswahl / Refresh ---------- */
+function select(id, opts = {}) {
+  selectedId = id;
+  document.querySelectorAll("#stops .stop").forEach(li => li.classList.toggle("selected", li.dataset.id === id));
+  const li = document.querySelector(`#stops .stop[data-id="${id}"]`);
+  if (li && !opts.fromList) li.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  if (mapView) mapView.select(id, opts);
+}
+function refresh(fit = true) {
+  const stops = visibleStops();
+  if (selectedId && !stops.some(s => s.id === selectedId)) selectedId = null;
+  const active = document.activeElement;
+  const keepFocus = active && active.dataset && active.dataset.f ? { id: active.closest(".stop").dataset.id, f: active.dataset.f } : null;
+  renderList();
+  if (keepFocus) {
+    const el = document.querySelector(`.stop[data-id="${keepFocus.id}"] [data-f="${keepFocus.f}"]`);
+    if (el) el.focus();
+  }
+  if (mapView) mapView.render(stops, selectedId, fit);
+}
+
+/* ---------- Toggle ---------- */
+document.querySelectorAll("#toggle button").forEach(btn => btn.addEventListener("click", () => {
+  variant = btn.dataset.variant;
+  document.getElementById("toggle").dataset.variant = variant;
+  document.querySelectorAll("#toggle button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
+  updateTitle();
+  refresh(true);
+}));
+function updateTitle() {
+  document.getElementById("lineTitle").textContent = `${line.title} · ${line.variants[variant].label} (${line.variants[variant].desc})`;
+}
+
+/* ---------- Export (.txt) ---------- */
+document.getElementById("exportBtn").addEventListener("click", () => {
+  const stops = visibleStops();
+  const total = stops.reduce((a, s) => a + getDwell(s), 0);
+  const L = [];
+  L.push(`BOGESTRA – ${line.title} – ${line.variants[variant].label} (${line.variants[variant].desc})`);
+  L.push(`Erstellt am: ${new Date().toLocaleString("de-DE")}`);
+  L.push(`Haltestellen: ${stops.length}   |   Standzeit gesamt: ${total} Min.`);
+  L.push("=".repeat(60), "");
+  stops.forEach((s, i) => {
+    const isLast = i === stops.length - 1;
+    L.push(`${String(i + 1).padStart(2, "0")}. ${s.name}`);
+    if (hasStand(s)) L.push(`    >>> STANDZEIT: ${getDwell(s)} Min. <<<`);
+    if (getStopNote(s).trim()) L.push(`    Fahrer-Notiz: ${getStopNote(s).trim().replace(/\n/g, "\n                  ")}`);
+    if (!isLast) {
+      L.push("    |", "    v");
+    } else {
+      L.push("    ENDHALTESTELLE");
+    }
+  });
+  const blob = new Blob(["﻿" + L.join("\r\n") + "\r\n"], { type: "text/plain;charset=utf-8" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `BOGESTRA_Linie_${ACTIVE_LINE}_${line.variants[variant].label}.txt`;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+});
+
+/* =====================================================================
+   Karte 1: Google Maps
+   ===================================================================== */
+function GoogleMapView() {
+  const map = new google.maps.Map(document.getElementById("map"), {
+    center: { lat: line.stops[0].lat, lng: line.stops[0].lng }, zoom: 13,
+    mapTypeControl: false, streetViewControl: false, fullscreenControl: true
+  });
+  const info = new google.maps.InfoWindow();
+  let markers = [], labels = [], poly = null, byId = {};
+
+  const stopIcon = sel => ({
+    path: google.maps.SymbolPath.CIRCLE, scale: sel ? 15 : 12,
+    fillColor: "#FFD400", fillOpacity: 1, strokeColor: "#222", strokeWeight: sel ? 4 : 2.5
+  });
+
+  return {
+    render(stops, sel, fit) {
+      markers.forEach(m => m.setMap(null)); labels.forEach(m => m.setMap(null));
+      markers = []; labels = []; byId = {};
+      if (poly) poly.setMap(null);
+      poly = new google.maps.Polyline({
+        map, path: stops.map(s => ({ lat: s.lat, lng: s.lng })),
+        strokeColor: "#00539f", strokeOpacity: .9, strokeWeight: 5
+      });
+      const bounds = new google.maps.LatLngBounds();
+      stops.forEach((s, i) => {
+        const pos = { lat: s.lat, lng: s.lng };
+        bounds.extend(pos);
+        const m = new google.maps.Marker({
+          map, position: pos, title: s.name, icon: stopIcon(s.id === sel), zIndex: s.id === sel ? 20 : 10,
+          label: { text: String(i + 1), color: "#111", fontWeight: "800", fontSize: "12px" }
+        });
+        m.addListener("click", () => select(s.id));
+        markers.push(m); byId[s.id] = m;
+        if (hasStand(s)) {
+          labels.push(new google.maps.Marker({
+            map, position: pos, clickable: false, zIndex: 30,
+            icon: { path: "M0,0", scale: 1, labelOrigin: new google.maps.Point(0, 30), strokeOpacity: 0 },
+            label: { text: dwellText(s), color: "#d10000", fontWeight: "800", fontSize: "13px" }
+          }));
+        }
+      });
+      if (fit && stops.length) map.fitBounds(bounds, 60);
+    },
+    select(id) {
+      const s = line.stops.find(x => x.id === id);
+      if (!s || !byId[id]) return;
+      Object.entries(byId).forEach(([k, m]) => { m.setIcon(stopIcon(k === id)); m.setZIndex(k === id ? 20 : 10); });
+      const stops = visibleStops(), i = stops.findIndex(x => x.id === id);
+      info.setContent(`<div style="font-family:system-ui;max-width:220px"><b>${i + 1}. ${esc(s.name)}</b>` +
+        (hasStand(s) ? `<div style="color:#d10000;font-weight:800">${esc(dwellText(s))}</div>` : "") +
+        (getStopNote(s) ? `<div>📝 ${esc(getStopNote(s))}</div>` : "") + `</div>`);
+      info.open({ map, anchor: byId[id] });
+      map.panTo({ lat: s.lat, lng: s.lng });
+    }
+  };
+}
+
+/* =====================================================================
+   Karte 2: schematische SVG-Ersatzkarte (ohne API-Key lauffähig)
+   ===================================================================== */
+function SvgMapView() {
+  const svg = document.getElementById("svgmap");
+  const NS = "http://www.w3.org/2000/svg";
+  let current = [], sel = null;
+  const el = (name, attrs, text) => {
+    const n = document.createElementNS(NS, name);
+    for (const k in attrs) n.setAttribute(k, attrs[k]);
+    if (text != null) n.textContent = text;
+    return n;
+  };
+  function info() {
+    const box = document.getElementById("svgInfo");
+    const i = current.findIndex(x => x.id === sel);
+    box.classList.toggle("hidden", i < 0);
+    if (i < 0) return;
+    const x = current[i];
+    box.innerHTML = `<b>${i + 1}. ${esc(x.name)}</b>` + (hasStand(x) ? `<div class="st">${esc(dwellText(x))}</div>` : "") +
+      (getStopNote(x) ? `<div>📝 ${esc(getStopNote(x))}</div>` : "");
+  }
+  function draw() {
+    svg.innerHTML = "";
+    const W = svg.clientWidth || 800, H = svg.clientHeight || 600, pad = 60, padR = 190;
+    // Projektion mit ungefähr korrektem Seitenverhältnis (cos der Breite)
+    const k = Math.cos(51.5 * Math.PI / 180);
+    const pts = current.map(s => ({ s, x: s.lng * k, y: -s.lat }));
+    const xs = pts.map(p => p.x), ys = pts.map(p => p.y);
+    const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
+    const scale = Math.min((W - pad - padR) / ((maxX - minX) || 1), (H - 2 * pad) / ((maxY - minY) || 1));
+    const ox = pad + (W - pad - padR - (maxX - minX) * scale) / 2, oy = (H - (maxY - minY) * scale) / 2;
+    pts.forEach(p => { p.px = ox + (p.x - minX) * scale; p.py = oy + (p.y - minY) * scale; });
+
+    // Raster
+    for (let x = 0; x < W; x += 60) svg.appendChild(el("line", { x1: x, y1: 0, x2: x, y2: H, stroke: "#d6dfcd", "stroke-width": 1 }));
+    for (let y = 0; y < H; y += 60) svg.appendChild(el("line", { x1: 0, y1: y, x2: W, y2: y, stroke: "#d6dfcd", "stroke-width": 1 }));
+
+    svg.appendChild(el("polyline", {
+      points: pts.map(p => `${p.px},${p.py}`).join(" "), fill: "none", stroke: "#00539f",
+      "stroke-width": 6, "stroke-linejoin": "round", "stroke-linecap": "round"
+    }));
+    pts.forEach((p, i) => {
+      const g = el("g", { style: "cursor:pointer" });
+      const r = p.s.id === sel ? 17 : 13;
+      g.appendChild(el("circle", { cx: p.px, cy: p.py, r, fill: "#FFD400", stroke: "#222", "stroke-width": p.s.id === sel ? 4 : 2.5 }));
+      g.appendChild(el("text", { x: p.px, y: p.py + 4.5, "text-anchor": "middle", "font-size": 12, "font-weight": 800, fill: "#111" }, i + 1));
+      g.appendChild(el("title", {}, p.s.name));
+      const label = el("text", { x: p.px + 20, y: p.py - 6, "font-size": 12, "font-weight": 600, fill: "#1b2430", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, p.s.name);
+      g.appendChild(label);
+      if (hasStand(p.s)) {
+        g.appendChild(el("text", { x: p.px + 20, y: p.py + 11, "font-size": 12, "font-weight": 800, fill: "#d10000", stroke: "#fff", "stroke-width": 3, "paint-order": "stroke" }, dwellText(p.s)));
+      }
+      g.addEventListener("click", () => select(p.s.id));
+      svg.appendChild(g);
+    });
+  }
+  window.addEventListener("resize", () => { if (current.length) draw(); });
+  return {
+    render(stops, s) { current = stops; sel = s; draw(); info(); },
+    select(id) { sel = id; draw(); info(); }
+  };
+}
+
+/* =====================================================================
+   Karten-Start / Fallback
+   ===================================================================== */
+const statusEl = document.getElementById("mapStatus");
+function useSvg(msg) {
+  document.getElementById("map").classList.add("hidden");
+  document.getElementById("svgmap").classList.remove("hidden");
+  document.getElementById("svgNote").classList.remove("hidden");
+  mapView = SvgMapView();
+  if (msg) { statusEl.textContent = msg; document.getElementById("keybox").open = true; }
+  refresh(true);
+}
+function useGoogle() {
+  document.getElementById("svgmap").classList.add("hidden");
+  document.getElementById("svgNote").classList.add("hidden");
+  document.getElementById("svgInfo").classList.add("hidden");
+  document.getElementById("map").classList.remove("hidden");
+  mapView = GoogleMapView();
+  statusEl.textContent = "Google Maps aktiv.";
+  refresh(true);
+}
+function loadGoogle(key) {
+  statusEl.textContent = "Lade Google Maps …";
+  window.gm_authFailure = () => useSvg("Google Maps hat den Key abgelehnt (Key, Abrechnung oder Domain-Beschränkung prüfen). Ersatzkarte aktiv.");
+  window.__gmReady = useGoogle;
+  const s = document.createElement("script");
+  s.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(key)}&callback=__gmReady`;
+  s.async = true;
+  s.onerror = () => useSvg("Google Maps konnte nicht geladen werden (offline?). Ersatzkarte aktiv.");
+  document.head.appendChild(s);
+}
+document.getElementById("saveKey").addEventListener("click", () => {
+  const key = document.getElementById("apiKey").value.trim();
+  if (!key) return;
+  try { localStorage.setItem(KEY_STORE, key); } catch (e) {}
+  location.reload();
+});
+
+/* Start */
+updateTitle();
+let savedKey = "";
+try { savedKey = localStorage.getItem(KEY_STORE) || ""; } catch (e) {}
+document.getElementById("apiKey").value = savedKey;
+useSvg();                       // sofort sichtbar
+if (savedKey) loadGoogle(savedKey);
+</script>
+</body>
+</html>
