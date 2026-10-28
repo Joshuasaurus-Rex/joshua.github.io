@@ -16,181 +16,261 @@
     --line: #d5dbe3;
     --text: #1b2430;
     --muted: #5d6b7c;
+    --safe-t: env(safe-area-inset-top, 0px);
+    --safe-b: env(safe-area-inset-bottom, 0px);
   }
-  * { box-sizing: border-box; }
-  html, body { height: 100%; margin: 0; }
-  body {
-    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-    color: var(--text); background: var(--bg);
-    display: grid; grid-template-columns: minmax(340px, 440px) 1fr; grid-template-rows: 100%;
-  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--text); background: var(--blue-dark); }
+  button { font-family: inherit; }
+  .hidden { display: none !important; }
+  .badge { background: var(--yellow); color: #111; font-weight: 800; font-size: 1.2rem; padding: 2px 11px; border-radius: 9px; }
 
-  /* ---------- Seitenleiste ---------- */
-  aside { display: flex; flex-direction: column; min-height: 0; background: var(--card); border-right: 1px solid var(--line); }
-  header { background: var(--blue); color: #fff; padding: 14px 16px 12px; }
-  header h1 { margin: 0; font-size: 1.05rem; letter-spacing: .02em; display: flex; align-items: center; gap: 10px; }
-  .badge { background: var(--yellow); color: #111; font-weight: 800; font-size: 1.3rem; padding: 2px 12px; border-radius: 8px; }
-  header .sub { margin-top: 6px; font-size: .85rem; opacity: .85; }
-
-  .controls { padding: 12px 16px; border-bottom: 1px solid var(--line); display: grid; gap: 10px; }
-
-  /* Toggle Langläufer / Kurzläufer */
-  .toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #e3e8ee; border-radius: 12px; padding: 4px; }
-  .toggle::before {
-    content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px);
-    background: var(--blue); border-radius: 9px; transition: transform .3s ease;
-  }
-  .toggle[data-variant="kurz"]::before, .toggle[data-dir="rueck"]::before { transform: translateX(100%); }
-  .toggle button {
-    position: relative; z-index: 1; border: 0; background: none; padding: 10px 6px; font: inherit; font-weight: 700;
-    color: var(--muted); cursor: pointer; transition: color .3s; border-radius: 9px; line-height: 1.2;
-  }
-  .toggle button small { display: block; font-weight: 400; font-size: .72rem; }
-  .toggle button[aria-pressed="true"] { color: #fff; }
-
-  .btn-export {
-    border: 0; border-radius: 12px; padding: 13px 14px; font: inherit; font-weight: 800; font-size: 1rem;
-    background: var(--yellow); color: #111; cursor: pointer; box-shadow: 0 2px 0 #b89b00;
-  }
-  .btn-export:hover { filter: brightness(1.05); }
-  .btn-export:active { transform: translateY(1px); box-shadow: none; }
-
-  .lm { width: 26px; height: 26px; border-radius: 50%; background: #FFD400; border: 2.5px solid #222; display: grid; place-items: center; font: 800 12px system-ui, sans-serif; color: #111; }
-  .lm.sel { width: 32px; height: 32px; border-width: 4px; margin: -3px 0 0 -3px; }
-  .lm-dwell { color: #d10000; font: 800 13px system-ui, sans-serif; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 3px #fff; }
-
-  /* Haltestellenliste */
-  .summary { padding: 8px 16px; font-size: .85rem; color: var(--muted); border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; }
-  ol#stops { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; min-height: 0; }
-  .stop { border-bottom: 1px solid var(--line); padding: 10px 16px; cursor: pointer; animation: fadeIn .35s ease; }
-  .stop.selected { background: #fff9d6; box-shadow: inset 4px 0 0 var(--yellow); }
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
-  .stop-head { display: flex; align-items: center; gap: 10px; }
-  .num {
-    flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--yellow); border: 2px solid #333;
-    display: grid; place-items: center; font-weight: 800; font-size: .8rem;
-  }
-  .stop-name { font-weight: 700; flex: 1; }
-  .dwell { color: var(--red); font-weight: 800; font-size: .9rem; white-space: nowrap; }
-  .fields { display: none; margin-top: 8px; gap: 8px; }
-  .stop.selected .fields { display: grid; }
-  .fields label { font-size: .75rem; color: var(--muted); display: grid; gap: 3px; }
-  .fields textarea, .fields input[type="text"] {
-    width: 100%; font: inherit; font-size: .9rem; font-weight: 400; padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; resize: vertical;
-  }
-  .fields input[type="text"] { width: 100%; }
-  .fields .hint { font-size: .78rem; color: var(--muted); }
-  .fields .hint button { margin-left: 6px; padding: 3px 8px; border: 1px solid var(--line); background: #fff; border-radius: 6px; font: inherit; font-size: .78rem; cursor: pointer; }
-  .seg-label { color: var(--blue-dark) !important; font-weight: 700; }
-  /* Kompakte Vorschau der Notizen bei nicht gewählten Haltestellen */
-  .peek { margin: 4px 0 0 38px; font-size: .8rem; color: var(--muted); }
-  .stop.selected .peek { display: none; }
-  .peek b { color: var(--blue-dark); }
-
-  /* ---------- Karte ---------- */
-  main { position: relative; min-height: 0; }
+  /* ---------- Vollbild-Karte ---------- */
+  #app { position: fixed; inset: 0; }
   #map { position: absolute; inset: 0; z-index: 0; }
   #svgmap { position: absolute; inset: 0; width: 100%; height: 100%; background: #eaf0e4; }
-  .svg-note { position: absolute; left: 10px; bottom: 10px; background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
-  .svg-info { position: absolute; left: 10px; top: 10px; background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
+  body.editing #map { cursor: crosshair; }
+  .leaflet-top.leaflet-right, .leaflet-top.leaflet-left { top: calc(72px + var(--safe-t)); }
+  .svg-note { position: absolute; left: 10px; top: calc(72px + var(--safe-t)); background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: .75rem; color: var(--muted); max-width: 80%; }
+  .svg-info { position: absolute; left: 10px; top: calc(110px + var(--safe-t)); background: #fff; padding: 8px 12px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.25); max-width: 260px; font-size: .85rem; }
   .svg-info .st { color: var(--red); font-weight: 800; }
-  .btn-live { border: 2px solid var(--blue); background: #fff; color: var(--blue); border-radius: 12px; padding: 11px 14px; font: inherit; font-weight: 800; cursor: pointer; }
+
+  /* ---------- Kopfleiste ---------- */
+  #topbar { position: absolute; z-index: 1200; top: 0; left: 0; right: 0; display: flex; gap: 8px; padding: calc(10px + var(--safe-t)) 10px 10px; pointer-events: none; }
+  #topbar > * { pointer-events: auto; }
+  .chip { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; background: rgba(0,58,112,.95); color: #fff; border: 0; border-radius: 16px; padding: 7px 14px 7px 8px; text-align: left; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+  .chip .ct { display: flex; flex-direction: column; min-width: 0; line-height: 1.2; }
+  .chip .ct b { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip .ct small { opacity: .8; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .chip .caret { margin-left: auto; opacity: .7; }
+  .iconbtn { width: 52px; height: 52px; border-radius: 16px; border: 0; background: #fff; color: var(--blue-dark); font-size: 1.5rem; cursor: pointer; box-shadow: 0 2px 10px rgba(0,0,0,.35); }
+
+  /* ---------- Untere Leiste: Live-Anzeige ---------- */
+  #bottom { position: absolute; z-index: 1200; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; gap: 8px; padding: 10px 10px calc(10px + var(--safe-b)); pointer-events: none; max-width: 640px; margin: 0 auto; }
+  #bottom > * { pointer-events: auto; }
+  #dock { display: flex; gap: 8px; }
+  .btn-live { flex: 1; border: 0; background: #fff; color: var(--blue-dark); border-radius: 18px; padding: 17px 14px; font-weight: 800; font-size: 1.1rem; cursor: pointer; box-shadow: 0 4px 16px rgba(0,0,0,.35); }
   .btn-live.on { background: var(--blue); color: #fff; }
-  #live { padding: 10px 16px; border-bottom: 1px solid var(--line); background: #eef5ff; display: grid; gap: 4px; }
-  #live .l-top { display: flex; justify-content: space-between; font-size: .8rem; color: var(--muted); }
-  #live #liveState { text-transform: uppercase; letter-spacing: .04em; }
-  #live .l-dist { font-weight: 800; color: var(--blue-dark); }
-  #live .l-name { font-size: 1.25rem; font-weight: 800; }
-  #live .l-stand { color: var(--red); font-weight: 800; font-size: 1.1rem; }
-  #live .l-note { font-size: 1rem; }
-  #live .l-prev { font-size: .95rem; background: #fff4c2; border-radius: 6px; padding: 6px 8px; }
-  #live .l-warn { color: #b35c00; font-weight: 700; font-size: .9rem; }
-  #live .l-row { display: flex; gap: 8px; margin-top: 4px; }
-  #live .l-row button { flex: 1; border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px; font: inherit; font-size: .85rem; cursor: pointer; }
-  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 10px; z-index: 3000; font-size: .9rem; max-width: 92vw; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
-  #toast button { margin-left: 8px; background: var(--yellow); border: 0; border-radius: 6px; padding: 5px 10px; font: inherit; font-weight: 700; cursor: pointer; }
+  body.live #liveBtn, body.live #logBtn { display: none; }
+  #live, #editBar { background: #fff; border-radius: 22px; box-shadow: 0 6px 24px rgba(0,0,0,.4); padding: 12px 16px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 5px; }
+  #live .l-top { font-size: .78rem; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; font-weight: 700; }
+  #live .l-main { display: flex; align-items: center; gap: 14px; }
+  #live .l-dist { font-size: 3rem; font-weight: 900; color: var(--blue-dark); line-height: 1; letter-spacing: -.02em; white-space: nowrap; }
+  #live .l-name { font-size: 1.25rem; font-weight: 800; line-height: 1.15; flex: 1; min-width: 0; overflow-wrap: break-word; hyphens: auto; }
+  #live .l-stand { color: var(--red); font-weight: 800; font-size: 1.25rem; }
+  #live .l-note { font-size: 1.1rem; }
+  #live .l-prev { font-size: .98rem; background: #fff4c2; border-radius: 8px; padding: 7px 10px; }
+  #live .l-warn { color: #b35c00; font-weight: 700; font-size: .95rem; }
+  #live .l-stats { font-size: .82rem; color: var(--muted); }
+  #live .l-opt { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+  #live .l-row, #editBar .l-row { display: flex; gap: 8px; margin-top: 4px; }
+  #live .l-row button, #editBar .l-row button { flex: 1; border: 1px solid var(--line); background: #f5f7fa; border-radius: 12px; padding: 11px; font-size: .95rem; font-weight: 700; cursor: pointer; }
+  #live.alert { background: #ffe3e3; }
+  #live.alert .l-warn { color: #b00000; font-size: 1.2rem; }
+  #editBar { background: #fff3e0; border: 2px solid #ff9800; }
+  #editHint { font-size: .95rem; }
+  #toast { position: fixed; left: 50%; top: calc(80px + var(--safe-t)); transform: translateX(-50%); background: #222; color: #fff; padding: 10px 14px; border-radius: 12px; z-index: 5000; font-size: .9rem; max-width: 92vw; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+  #toast button { margin-left: 8px; background: var(--yellow); border: 0; border-radius: 8px; padding: 6px 12px; font-weight: 700; cursor: pointer; }
+
+  /* ---------- Menü (Vollbild) ---------- */
+  #sheet { position: fixed; inset: 0; z-index: 3000; background: var(--bg); display: flex; flex-direction: column; }
+  #sheet > header { background: var(--blue); color: #fff; padding: calc(12px + var(--safe-t)) 14px 12px; display: flex; align-items: center; gap: 10px; }
+  #sheet > header h2 { margin: 0; font-size: 1.15rem; flex: 1; }
+  .closebtn { width: 44px; height: 44px; border-radius: 12px; border: 0; background: rgba(255,255,255,.18); color: #fff; font-size: 1.3rem; cursor: pointer; }
+  .tabs { display: flex; background: #fff; border-bottom: 1px solid var(--line); }
+  .tabs button { flex: 1; padding: 14px 6px; border: 0; background: none; font-weight: 700; font-size: .95rem; color: var(--muted); border-bottom: 3px solid transparent; cursor: pointer; }
+  .tabs button.on { color: var(--blue); border-bottom-color: var(--blue); }
+  .pane { flex: 1; min-height: 0; overflow-y: auto; display: none; }
+  .pane.on { display: block; }
+  .pad { padding: 14px; display: grid; gap: 12px; max-width: 640px; margin: 0 auto; }
+  .pane-card { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; }
+  .pane-card h3 { margin: 0 0 6px; font-size: 1rem; }
+  .how { font-size: .9rem; color: var(--text); margin: 6px 0 0; padding-left: 1.2em; }
+  .how li { margin: 4px 0; }
+  .detour-pane button, .pad .act { margin-top: 8px; padding: 12px 14px; border: 1px solid var(--line); background: #fff; border-radius: 12px; font-size: .95rem; font-weight: 700; cursor: pointer; width: 100%; text-align: left; }
+  .detour-pane button.on { background: #ff9800; border-color: #e65100; }
+  .detour-pane .chk { display: flex; gap: 10px; align-items: center; font-size: 1rem; font-weight: 600; }
+  .detour-pane .chk input { width: 22px; height: 22px; }
+  .detour-pane .row { display: flex; gap: 8px; }
+  .detour-pane #detourList { margin-top: 6px; font-size: .9rem; }
+  .detour-pane #detourList button { width: auto; margin: 0 0 0 6px; padding: 4px 10px; }
+  .detour-pane p { margin: 8px 0 0; color: var(--muted); font-size: .88rem; }
+  .btn-export { border: 0; border-radius: 14px; padding: 16px 14px; font-weight: 800; font-size: 1.05rem; background: var(--yellow); color: #111; cursor: pointer; box-shadow: 0 2px 0 #b89b00; width: 100%; }
+  .btn-export:active { transform: translateY(1px); box-shadow: none; }
+  .summary { padding: 8px 16px; font-size: .85rem; color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+
+  /* ---------- Haltestellenliste ---------- */
+  ol#stops { list-style: none; margin: 0; padding: 0; background: #fff; }
+  .stop { border-bottom: 1px solid var(--line); padding: 13px 16px; cursor: pointer; animation: fadeIn .35s ease; }
+  .stop.selected { background: #fff9d6; box-shadow: inset 4px 0 0 var(--yellow); }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+  .stop-head { display: flex; align-items: center; gap: 12px; }
+  .num { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--yellow); border: 2px solid #333; display: grid; place-items: center; font-weight: 800; font-size: .85rem; }
+  .stop-name { font-weight: 700; flex: 1; font-size: 1.02rem; }
+  .dwell { color: var(--red); font-weight: 800; font-size: .95rem; white-space: nowrap; }
+  .fields { display: none; margin-top: 10px; gap: 10px; }
+  .stop.selected .fields { display: grid; }
+  .fields label { font-size: .8rem; color: var(--muted); display: grid; gap: 4px; }
+  .fields textarea, .fields input[type="text"] { width: 100%; font: inherit; font-size: 1rem; font-weight: 400; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; resize: vertical; }
+  .fields .chk { display: flex; gap: 8px; align-items: center; font-size: .92rem; color: var(--text); }
+  .fields .chk input { width: 20px; height: 20px; }
+  .fields .hint { font-size: .82rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .fields .hint button, .fields .showmap { padding: 8px 12px; border: 1px solid var(--line); background: #fff; border-radius: 10px; font-size: .85rem; font-weight: 600; cursor: pointer; }
+  .fields .showmap { background: var(--blue); color: #fff; border-color: var(--blue); justify-self: start; }
+  .peek { margin: 4px 0 0 44px; font-size: .85rem; color: var(--muted); }
+  .stop.selected .peek { display: none; }
+  .stop.next { box-shadow: inset 5px 0 0 var(--blue); }
+  .stop.closed .stop-name { text-decoration: line-through; opacity: .6; }
+
+  /* ---------- Marker ---------- */
+  .lm { width: 28px; height: 28px; border-radius: 50%; background: #FFD400; border: 2.5px solid #222; display: grid; place-items: center; font: 800 12px system-ui, sans-serif; color: #111; }
+  .lm.sel { width: 34px; height: 34px; border-width: 4px; margin: -3px 0 0 -3px; }
+  .lm.closed { background: #c9c9c9; border-color: #777; color: #555; }
   .lm.dstart { box-shadow: 0 0 0 4px #ff9800; }
   .lm.dinc { box-shadow: 0 0 0 3px #ff9800; }
-  details.detour #detourList { margin-top: 6px; }
-  details.detour #detourList button { margin: 0 0 0 6px; padding: 2px 8px; }
-  .lm.closed { background: #c9c9c9; border-color: #777; color: #555; }
-  .stop.closed .stop-name { text-decoration: line-through; opacity: .6; }
-  body.editing #map { cursor: crosshair; }
-  details.detour { font-size: .85rem; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
-  details.detour summary { cursor: pointer; font-weight: 700; }
-  details.detour .chk, .fields .chk { display: flex; gap: 6px; align-items: center; margin-top: 6px; }
-  details.detour button { margin-top: 6px; padding: 7px 10px; border: 1px solid var(--line); background: #fff; border-radius: 8px; font: inherit; cursor: pointer; }
-  details.detour button.on { background: #ff9800; border-color: #e65100; font-weight: 700; }
-  details.detour .row { display: flex; gap: 6px; }
-  details.detour p { margin: 6px 0 0; color: var(--muted); }
-  #live.alert { background: #ffe3e3; }
-  #live.alert .l-warn { color: #b00000; font-size: 1.1rem; }
-  #live .l-stats { font-size: .85rem; color: var(--muted); }
-  #live .l-opt { font-size: .8rem; color: var(--muted); display: flex; gap: 6px; align-items: center; }
-  .stop.next { box-shadow: inset 4px 0 0 var(--blue); }
-  .me-dot { width: 18px; height: 18px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px #1a73e8, 0 0 8px rgba(0,0,0,.4); }
-  .hidden { display: none !important; }
+  .lm-dwell { color: #d10000; font: 800 13px system-ui, sans-serif; white-space: nowrap; text-shadow: -1px -1px 0 #fff, 1px -1px 0 #fff, -1px 1px 0 #fff, 1px 1px 0 #fff, 0 0 3px #fff; }
+  .me-dot { width: 20px; height: 20px; border-radius: 50%; background: #1a73e8; border: 3px solid #fff; box-shadow: 0 0 0 2px #1a73e8, 0 0 8px rgba(0,0,0,.4); }
 
-  @media (max-width: 760px) {
-    body { grid-template-columns: 1fr; grid-template-rows: 42vh 1fr; }
-    main { order: -1; }
-    aside { border-right: 0; }
-  }
+  /* ---------- Umschalter ---------- */
+  .toggle { position: relative; display: grid; grid-template-columns: 1fr 1fr; background: #e3e8ee; border-radius: 14px; padding: 4px; }
+  .toggle::before { content: ""; position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc(50% - 4px); background: var(--blue); border-radius: 11px; transition: transform .3s ease; }
+  .toggle[data-variant="kurz"]::before, .toggle[data-dir="rueck"]::before { transform: translateX(100%); }
+  .toggle button { position: relative; z-index: 1; border: 0; background: none; padding: 13px 6px; font-weight: 700; font-size: 1rem; color: var(--muted); cursor: pointer; transition: color .3s; border-radius: 11px; line-height: 1.25; }
+  .toggle button small { display: block; font-weight: 400; font-size: .75rem; }
+  .toggle button[aria-pressed="true"] { color: #fff; }
+
+  /* ---------- Startbildschirm ---------- */
+  #start { position: fixed; inset: 0; z-index: 4000; background: linear-gradient(160deg, #003a70 0%, #00539f 55%, #0a6fc4 100%); color: #fff; overflow-y: auto; }
+  .start-in { max-width: 520px; margin: 0 auto; min-height: 100%; padding: calc(22px + var(--safe-t)) 18px calc(22px + var(--safe-b)); display: flex; flex-direction: column; gap: 14px; }
+  .brand { display: flex; align-items: center; gap: 14px; margin-bottom: 4px; }
+  .brand .badge { font-size: 2rem; padding: 4px 16px; border-radius: 12px; }
+  .brand h1 { margin: 0; font-size: 1.6rem; letter-spacing: .04em; }
+  .brand p { margin: 2px 0 0; opacity: .85; font-size: .95rem; }
+  .s-card { background: #fff; color: var(--text); border-radius: 20px; padding: 14px; }
+  .s-card h3 { margin: 0 0 10px; font-size: .78rem; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); }
+  .line-card { display: flex; gap: 12px; align-items: center; border: 3px solid var(--blue); border-radius: 14px; padding: 10px 12px; }
+  .line-card .lc-t { flex: 1; font-size: .9rem; line-height: 1.3; }
+  .line-card .lc-t small { display: block; color: var(--muted); }
+  .line-card .ok { color: var(--blue); font-size: 1.4rem; font-weight: 800; }
+  .line-card.off { border-color: var(--line); opacity: .55; margin-top: 8px; }
+  .grow { flex: 1; }
+  .big-btn { border: 0; border-radius: 18px; padding: 19px; font-weight: 800; font-size: 1.15rem; cursor: pointer; }
+  .big-btn.primary { background: var(--yellow); color: #111; box-shadow: 0 3px 0 #b89b00; }
+  .big-btn.secondary { background: rgba(255,255,255,.95); color: var(--blue-dark); }
+  .fine { font-size: .75rem; opacity: .75; text-align: center; margin: 4px 0 0; }
 </style>
 </head>
 <body>
 
-<aside>
-  <header>
-    <h1><span class="badge">390</span> BOGESTRA Routen-Lernhilfe</h1>
-    <div class="sub" id="lineTitle"></div>
-  </header>
-
-  <div class="controls">
-    <div class="toggle" id="dirToggle" data-dir="hin" role="group" aria-label="Fahrtrichtung">
-      <button type="button" data-dir="hin" aria-pressed="true">Hinfahrt<small>Linden → Herne Bf</small></button>
-      <button type="button" data-dir="rueck" aria-pressed="false">Rückfahrt<small>Herne Bf → Linden</small></button>
-    </div>
-    <div class="toggle" id="toggle" data-variant="lang" role="group" aria-label="Streckenvariante">
-      <button type="button" data-variant="lang" aria-pressed="true">Langläufer<small>gesamte Strecke</small></button>
-      <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
-    </div>
-    <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
-    <button type="button" class="btn-live" id="liveBtn">📍 Live-Verfolgung starten</button>
-    <button type="button" class="btn-live hidden" id="logBtn">📄 Fahrtprotokoll (.txt)</button>
-    <details class="detour" id="detourBox">
-      <summary>🚧 Umleitung / Baustelle</summary>
-      <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv (Karte, Route und Prüfung folgen der Umleitung)</label>
-      <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
-      <div class="row"><button type="button" id="viaUndo">↩ Rückgängig</button><button type="button" id="viaClear">Alle Umleitungen löschen</button></div>
-      <div id="detourList"></div>
-      <p id="detourHint">In der Haltestellenliste kannst du bei einer Haltestelle „entfällt“ ankreuzen.</p>
-    </details>
-  </div>
-
-  <div id="live" class="hidden" aria-live="polite">
-    <div class="l-top"><span id="liveState">Nächste Haltestelle</span><span class="l-dist" id="liveDist"></span></div>
-    <div class="l-name" id="liveName"></div>
-    <div class="l-stand" id="liveStand"></div>
-    <div class="l-note" id="liveNote"></div>
-    <div class="l-prev hidden" id="livePrev"></div>
-    <div class="l-warn" id="liveWarn"></div>
-    <div class="l-stats" id="liveStats"></div>
-    <label class="l-opt"><input type="checkbox" id="alertOpt" checked> Warnung bei Abweichung mit Ton &amp; Vibration</label>
-    <div class="l-row"><button type="button" id="followBtn">Karte folgt: an</button><button type="button" id="liveStop">Beenden</button></div>
-  </div>
-
-  <div class="summary" style="border-bottom:0;padding-bottom:0"><span id="routeStatus"></span></div>
-  <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
-  <ol id="stops"></ol>
-</aside>
-
-<main>
+<div id="app">
   <div id="map" class="hidden"></div>
   <svg id="svgmap" class="hidden" xmlns="http://www.w3.org/2000/svg"></svg>
   <div class="svg-info hidden" id="svgInfo"></div>
   <div class="svg-note hidden" id="svgNote">Schematische Ersatzkarte (Kartenkacheln nicht erreichbar – offline?).</div>
-</main>
+
+  <div id="topbar">
+    <button type="button" class="chip" id="homeBtn" aria-label="Linie und Richtung wählen">
+      <span class="badge">390</span>
+      <span class="ct"><b id="lineTitle"></b><small id="lineSub"></small></span>
+      <span class="caret">▾</span>
+    </button>
+    <button type="button" class="iconbtn" id="menuBtn" aria-label="Menü">☰</button>
+  </div>
+
+  <div id="bottom">
+    <div id="editBar" class="hidden">
+      <div id="editHint"></div>
+      <div class="l-row"><button type="button" id="editUndo">↩ Rückgängig</button><button type="button" id="editDone">✔ Fertig</button></div>
+    </div>
+    <div id="live" class="hidden" aria-live="polite">
+      <div class="l-top" id="liveState">Nächste Haltestelle</div>
+      <div class="l-main"><span class="l-dist" id="liveDist"></span><span class="l-name" id="liveName"></span></div>
+      <div class="l-stand" id="liveStand"></div>
+      <div class="l-note" id="liveNote"></div>
+      <div class="l-prev hidden" id="livePrev"></div>
+      <div class="l-warn" id="liveWarn"></div>
+      <div class="l-stats" id="liveStats"></div>
+      <label class="l-opt"><input type="checkbox" id="alertOpt" checked> Warnung bei Abweichung mit Ton &amp; Vibration</label>
+      <div class="l-row"><button type="button" id="followBtn">Karte folgt: an</button><button type="button" id="liveStop">■ Beenden</button></div>
+    </div>
+    <div id="dock">
+      <button type="button" class="btn-live" id="liveBtn">📍 Live-Verfolgung starten</button>
+      <button type="button" class="btn-live hidden" id="logBtn">📄 Fahrtprotokoll</button>
+    </div>
+  </div>
+</div>
+
+<div id="sheet" class="hidden">
+  <header><h2>Menü</h2><button type="button" class="closebtn" id="sheetClose" aria-label="Schließen">✕</button></header>
+  <nav class="tabs">
+    <button type="button" data-tab="stops" class="on">Haltestellen</button>
+    <button type="button" data-tab="detour">Umleitung</button>
+    <button type="button" data-tab="more">Mehr</button>
+  </nav>
+  <section class="pane on" id="pane-stops">
+    <div class="summary"><span id="routeStatus"></span></div>
+    <div class="summary"><span id="countInfo"></span><span id="dwellInfo"></span></div>
+    <ol id="stops"></ol>
+  </section>
+  <section class="pane" id="pane-detour">
+    <div class="pad detour-pane" id="detourBox">
+      <div class="pane-card">
+        <h3>🚧 Umleitung / Baustelle</h3>
+        <label class="chk"><input type="checkbox" id="detourOn"> Umleitung aktiv</label>
+        <p>Karte, Route, „Nächste Haltestelle“ und die Routenprüfung folgen dann der Umleitung.</p>
+        <button type="button" id="detourEditBtn">✏ Umleitung einzeichnen</button>
+        <div class="row"><button type="button" id="viaUndo">↩ Rückgängig</button><button type="button" id="viaClear">Alle löschen</button></div>
+        <div id="detourList"></div>
+      </div>
+      <div class="pane-card">
+        <h3>So geht’s</h3>
+        <ol class="how">
+          <li><b>Umleitung einzeichnen:</b> Start-Haltestelle antippen → Punkte entlang der Umleitung antippen → End-Haltestelle antippen. Haltestellen dazwischen entfallen (grau).</li>
+          <li><b>Haltestelle auf der Umleitung wieder dazunehmen:</b> graue Haltestelle auf der Karte oder in der Liste antippen. Sie wird wieder angefahren (oranger Rand).</li>
+          <li><b>Haltestelle streichen:</b> in der Liste öffnen und „Haltestelle entfällt“ ankreuzen.</li>
+        </ol>
+        <p id="detourHint"></p>
+      </div>
+    </div>
+  </section>
+  <section class="pane" id="pane-more">
+    <div class="pad">
+      <button type="button" class="btn-export" id="exportBtn">⬇ Linie als .txt exportieren</button>
+      <button type="button" class="act" id="changeLine">🔀 Linie / Richtung / Variante ändern</button>
+      <div class="pane-card"><p style="margin:0;color:var(--muted);font-size:.85rem">Eingaben (Notizen, Standzeiten, Umleitungen, verschobene Marker) werden nur in diesem Browser gespeichert.<br>Karte © OpenStreetMap-Mitwirkende · Haltestellen: Fahrplan 390 und VRR-Stammdaten.</p></div>
+    </div>
+  </section>
+</div>
+
+<div id="start">
+  <div class="start-in">
+    <div class="brand"><span class="badge">390</span><div><h1>BOGESTRA</h1><p>Routen-Lernhilfe für Busfahrer</p></div></div>
+    <div class="s-card">
+      <h3>Linie</h3>
+      <div class="line-card"><span class="badge">390</span><div class="lc-t"><b>Bochum-Linden – Höntrop – Wattenscheid – Herne-Röhlinghausen – Eickel – Herne Bf</b><small>53 Haltestellen je Richtung</small></div><span class="ok">✔</span></div>
+      <div class="line-card off"><div class="lc-t"><b>Weitere Linien folgen</b><small>Daten lassen sich im JSON ergänzen</small></div></div>
+    </div>
+    <div class="s-card">
+      <h3>Richtung</h3>
+      <div class="toggle" id="dirToggle" data-dir="hin" role="group" aria-label="Fahrtrichtung">
+        <button type="button" data-dir="hin" aria-pressed="true">Hinfahrt<small>Linden → Herne Bf</small></button>
+        <button type="button" data-dir="rueck" aria-pressed="false">Rückfahrt<small>Herne Bf → Linden</small></button>
+      </div>
+    </div>
+    <div class="s-card">
+      <h3>Variante</h3>
+      <div class="toggle" id="toggle" data-variant="lang" role="group" aria-label="Streckenvariante">
+        <button type="button" data-variant="lang" aria-pressed="true">Langläufer<small>gesamte Strecke</small></button>
+        <button type="button" data-variant="kurz" aria-pressed="false">Kurzläufer<small>verkürzte Strecke</small></button>
+      </div>
+    </div>
+    <div class="grow"></div>
+    <button type="button" class="big-btn primary" id="goLearn">🗺 Strecke ansehen &amp; lernen</button>
+    <button type="button" class="big-btn secondary" id="goLive">📍 Fahrt starten (Live-GPS)</button>
+    <p class="fine">Bitte das Handy nicht während der Fahrt bedienen – vor der Abfahrt starten und fest montieren.</p>
+  </div>
+</div>
 
 <!--
   HALTESTELLEN-DATEN Linie 390 (JSON) – hier die echten VRR-Daten eintragen.
@@ -349,6 +429,7 @@ const line = {
 const STORE_KEY = "bogestra-lernhilfe-v2";
 
 let variant = "lang";
+try { if (localStorage.getItem("bogestra-variant") === "kurz") variant = "kurz"; } catch (e) {}
 let dir = "hin";
 try { if (localStorage.getItem("bogestra-dir") === "rueck") dir = "rueck"; } catch (e) {}
 let selectedId = null;
@@ -430,6 +511,7 @@ function renderList() {
       </div>
       ${getStopNote(s) ? `<div class="peek">📝 ${esc(getStopNote(s))}</div>` : ""}
       <div class="fields">
+        <button type="button" class="showmap" data-show="1">🗺 Auf Karte zeigen</button>
         <label>Standzeit (z. B. „5 Min“)
           <input type="text" value="${esc(getStand(s))}" data-f="standzeit" placeholder="leer = keine Standzeit">
         </label>
@@ -450,6 +532,7 @@ function renderList() {
     c.addEventListener("change", () => setStopClosed(c.closest(".stop").dataset.id, c.checked));
   });
   ol.querySelectorAll("[data-move]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); const id = b.closest(".stop").dataset.id; dragId = dragId === id ? null : id; refresh(false); }));
+  ol.querySelectorAll("[data-show]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); closeSheet(); select(b.closest(".stop").dataset.id); }));
   ol.querySelectorAll("[data-reset]").forEach(b => b.addEventListener("click", e => { e.stopPropagation(); resetStop(b.closest(".stop").dataset.id); }));
   // Eingaben speichern
   ol.querySelectorAll("[data-f]").forEach(el => {
@@ -498,6 +581,7 @@ function refresh(fit = true) {
 /* ---------- Toggle ---------- */
 document.querySelectorAll("#toggle button").forEach(btn => btn.addEventListener("click", () => {
   variant = btn.dataset.variant;
+  try { localStorage.setItem("bogestra-variant", variant); } catch (e) {}
   document.getElementById("toggle").dataset.variant = variant;
   document.querySelectorAll("#toggle button").forEach(b => b.setAttribute("aria-pressed", String(b === btn)));
   updateTitle();
@@ -514,7 +598,8 @@ function setDir(d) {
   refresh(true);
 }
 function updateTitle() {
-  document.getElementById("lineTitle").textContent = `${line.title} · ${line.dirs[dir].label} (${line.dirs[dir].desc}) · ${line.variants[variant].label}`;
+  document.getElementById("lineTitle").textContent = `${line.dirs[dir].label} · ${line.variants[variant].label}`;
+  document.getElementById("lineSub").textContent = `${line.title} · ${line.dirs[dir].desc}`;
 }
 
 /* ---------- Export (.txt) ---------- */
@@ -551,7 +636,9 @@ document.getElementById("exportBtn").addEventListener("click", () => {
    Karte 1: OpenStreetMap (Leaflet) – kein API-Key nötig
    ===================================================================== */
 function LeafletView() {
-  const map = L.map("map", { zoomControl: true });
+  const map = L.map("map", { zoomControl: false, attributionControl: false });
+  L.control.zoom({ position: "topright" }).addTo(map);
+  L.control.attribution({ position: "topleft", prefix: false }).addTo(map);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: "&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a>-Mitwirkende"
   }).addTo(map);
@@ -927,13 +1014,15 @@ const stopById = id => allStops().find(x => x.id === id);
 function syncDetourUi() {
   $("detourOn").checked = detourOn();
   $("detourEditBtn").classList.toggle("on", detourEdit);
-  $("detourEditBtn").textContent = detourEdit ? "✔ Fertig (Einzeichnen beenden)" : "✏ Umleitung einzeichnen";
+  $("detourEditBtn").textContent = detourEdit ? "✔ Einzeichnen beenden" : "✏ Umleitung einzeichnen";
   document.body.classList.toggle("editing", detourEdit);
   let h;
   if (!detourEdit) h = "Einzeichnen: 1. Haltestelle antippen, an der die Umleitung beginnt · 2. Punkte entlang der Umleitung antippen · 3. Haltestelle antippen, an der die normale Route wieder beginnt. Haltestellen dazwischen entfallen automatisch.";
   else if (!draft) h = "Schritt 1: Tippe auf die Haltestelle (Marker), nach der die Umleitung beginnt.";
   else h = `Start: ${stopById(draft.fromId).name}. Schritt 2: Tippe Punkte entlang der Umleitung, in Fahrtrichtung (${draft.pts.length} gesetzt). Schritt 3: Tippe die Haltestelle an, an der die normale Route wieder beginnt.`;
-  $("detourHint").textContent = h;
+  $("detourHint").textContent = detourEdit ? h : "";
+  $("editHint").textContent = h;
+  $("editBar").classList.toggle("hidden", !detourEdit);
   const box = $("detourList"); box.innerHTML = "";
   user.detours.filter(d => line.dirs[dir].stops.some(x => x.id === d.fromId)).forEach(d => {
     const row = document.createElement("div");
@@ -991,9 +1080,11 @@ function undoDetour() {
 $("detourOn").addEventListener("change", () => { user.detour = $("detourOn").checked; saveUser(); refresh(false); });
 $("detourEditBtn").addEventListener("click", () => {
   detourEdit = !detourEdit; draft = null;
-  if (detourEdit) { user.detour = true; saveUser(); }
+  if (detourEdit) { user.detour = true; saveUser(); closeSheet(); }
   syncDetourUi(); refresh(false);
 });
+$("editDone").addEventListener("click", () => { detourEdit = false; draft = null; syncDetourUi(); refresh(false); });
+$("editUndo").addEventListener("click", () => undoDetour());
 $("viaUndo").addEventListener("click", undoDetour);
 $("viaClear").addEventListener("click", () => {
   user.detours = user.detours.filter(d => !line.dirs[dir].stops.some(x => x.id === d.fromId)); draft = null; saveUser(); syncDetourUi(); refresh(false);
@@ -1108,6 +1199,7 @@ document.addEventListener("visibilitychange", () => {
 function startLive() {
   if (!("geolocation" in navigator)) { alert("Dieses Gerät/dieser Browser unterstützt keine Standortabfrage."); return; }
   live.on = true; live.follow = true; live.lastSeg = 0;
+  document.body.classList.add("live");
   live.log = []; live.visited = {}; live.skipped = {}; live.off = { since: null, active: false, max: 0, start: 0 }; live.offCount = 0; live.startIdx = null; live.hiddenAt = null;
   try { live.audio = live.audio || new (window.AudioContext || window.webkitAudioContext)(); if (live.audio.resume) live.audio.resume(); } catch (e) {}
   logEvent(`Start der Überwachung (${line.dirs[dir].label}, ${line.variants[variant].label})`);
@@ -1131,6 +1223,7 @@ function stopLive() {
   if (live.watchId != null) navigator.geolocation.clearWatch(live.watchId);
   try { if (live.wake) live.wake.release(); } catch (e) {}
   logEvent("Ende der Überwachung");
+  document.body.classList.remove("live");
   live.on = false; live.watchId = null; live.pos = null; live.wake = null; live.nextId = null;
   $("liveBtn").classList.remove("on"); $("liveBtn").textContent = "📍 Live-Verfolgung starten";
   $("live").classList.add("hidden");
@@ -1177,6 +1270,31 @@ function useLeaflet() {
 
 /* Start */
 if (dir === "rueck") { document.getElementById("dirToggle").dataset.dir = "rueck"; document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === "rueck"))); }
+/* ---------- Startbildschirm & Menü ---------- */
+function syncToggles() {
+  $("dirToggle").dataset.dir = dir;
+  document.querySelectorAll("#dirToggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.dir === dir)));
+  $("toggle").dataset.variant = variant;
+  document.querySelectorAll("#toggle button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.variant === variant)));
+}
+const mapResize = () => setTimeout(() => { if (mapView && mapView.resize) mapView.resize(); }, 50);
+function showStart() { syncToggles(); $("start").classList.remove("hidden"); }
+function hideStart() { $("start").classList.add("hidden"); mapResize(); }
+function openSheet(tab) { $("sheet").classList.remove("hidden"); setTab(tab || "stops"); }
+function closeSheet() { $("sheet").classList.add("hidden"); mapResize(); }
+function setTab(t) {
+  document.querySelectorAll("#sheet .tabs button").forEach(b => b.classList.toggle("on", b.dataset.tab === t));
+  document.querySelectorAll("#sheet .pane").forEach(p => p.classList.toggle("on", p.id === "pane-" + t));
+}
+$("goLearn").addEventListener("click", hideStart);
+$("goLive").addEventListener("click", () => { hideStart(); if (!live.on) startLive(); });
+$("homeBtn").addEventListener("click", showStart);
+$("changeLine").addEventListener("click", () => { closeSheet(); showStart(); });
+$("menuBtn").addEventListener("click", () => openSheet("stops"));
+$("sheetClose").addEventListener("click", closeSheet);
+document.querySelectorAll("#sheet .tabs button").forEach(b => b.addEventListener("click", () => setTab(b.dataset.tab)));
+
+syncToggles();
 syncDetourUi();
 updateTitle();
 if (window.L) useLeaflet(); else useSvg();   // Leaflet nicht ladbar (offline) -> SVG-Ersatzkarte
