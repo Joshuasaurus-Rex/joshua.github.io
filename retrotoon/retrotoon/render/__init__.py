@@ -7,6 +7,9 @@ def get_renderer(name: str, **kw):
     if name == "diffusion":
         from .diffusion import DiffusionRenderer  # schwere Imports nur bei Bedarf
         return DiffusionRenderer(**kw)
+    if name == "video":
+        from .video import VideoRenderer
+        return VideoRenderer(**kw)
     raise ValueError(f"Unbekanntes Backend: {name}")
 
 

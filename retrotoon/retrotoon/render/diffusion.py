@@ -15,6 +15,7 @@ class DiffusionRenderer:
         import torch
         from diffusers import AutoPipelineForText2Image
 
+        self.size = (W, H)
         self.fps = fps
         dev = "cuda" if torch.cuda.is_available() else "cpu"
         dtype = torch.float16 if dev == "cuda" else torch.float32

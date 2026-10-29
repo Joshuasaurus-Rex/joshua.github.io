@@ -15,11 +15,13 @@ VHS = ("scale=1280:720:flags=neighbor,"
 
 def render(info: AudioInfo, scenes, renderer, audio_path: str, out: str, vhs: bool = True):
     fps = renderer.fps
-    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "640x360",
+    cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "rgb24", "-s", "%dx%d" % renderer.size,
            "-r", str(fps), "-i", "-", "-i", audio_path]
     if vhs:
         cmd += ["-vf", VHS]
     cmd += ["-c:v", "libx264", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out]
+    if hasattr(renderer, "prepare"):  # z.B. KI-Clips vorab erzeugen
+        renderer.prepare(scenes)
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     n = int(info.duration * fps)
     beats = info.beats

@@ -23,6 +23,20 @@ python -m retrotoon song.mp3 --backend diffusion --llm llama3.2   # lokale KI-Ke
 
 Das Storyboard landet als `<out>.storyboard.json` neben dem Video und kann angepasst werden.
 
+## Realistischer Look (lokal, GPU)
+
+```bash
+python -m retrotoon song.mp3 -l songs/endstation_wahnsinn.txt --backend video --look realistic -o video.mp4 --vocal-end 190
+```
+
+Pro Szene: SDXL-Keyframe → LTX-Video-Clip (Image-to-Video). Clips werden in `cache/` abgelegt, ein erneuter Lauf
+rechnet nur Neues. AMD (z. B. RX 7900 XT): ROCm-Build von PyTorch installieren, danach
+`pip install diffusers transformers accelerate sentencepiece`. **Noch ungetestet** (kein GPU in der Entwicklungsumgebung).
+
+## Zeitsteuerung der Lyrics
+
+Anker in der Lyrics-Datei: `[Chorus @1:00]` oder `0:42 Zeile`. Dazwischen wird nach Textlänge verteilt.
+
 ## Nächste Schritte
 
 - Figurenkonsistenz (LoRA/IP-Adapter), Image-to-Video-Modell für echte Bewegung

@@ -13,7 +13,14 @@ import numpy as np
 
 from .audio import AudioInfo
 
-STYLE = "1980s saturday morning cartoon style, cel shaded, bold outlines, flat vivid colors, VHS grain"
+LOOKS = {
+    "cartoon": ("1980s saturday morning cartoon style, cel shaded, bold outlines, flat vivid colors, VHS grain",
+                "a cool cartoon hero with sunglasses and a blue quiff"),
+    "realistic": ("photorealistic cinematic film still, shot on 35mm, 1980s color grading, film grain, "
+                  "neon lighting, shallow depth of field, moody",
+                  "a tired commuter in his 30s, dark bomber jacket, short brown hair"),
+}
+STYLE = LOOKS["cartoon"][0]  # Standard; build() überschreibt per look
 
 # Setting -> Bildbeschreibung (fürs Diffusion-Backend; das prozedurale nutzt den Key)
 SETTINGS = {
@@ -87,7 +94,10 @@ def _snap(t: float, beats: np.ndarray) -> float:
 
 
 def build(info: AudioInfo, lyrics: str, character: str, bars_per_scene: int = 4,
-          llm: str | None = None, vocal_start: float = 0.0, vocal_end: float | None = None) -> list[Scene]:
+          llm: str | None = None, vocal_start: float = 0.0, vocal_end: float | None = None,
+          look: str = "cartoon") -> list[Scene]:
+    global STYLE
+    STYLE = LOOKS[look][0]
     items = _parse(lyrics)
     if not items:
         return _generic(info, character, bars_per_scene)

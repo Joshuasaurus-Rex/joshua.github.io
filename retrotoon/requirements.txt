@@ -1,7 +1,7 @@
 numpy
 Pillow
 # Optional: lokale KI-Keyframes (Backend "diffusion", GPU empfohlen)
-# torch
+# torch  (AMD: ROCm-Build von pytorch.org/get-started/locally)
 # diffusers
 # transformers
 # accelerate

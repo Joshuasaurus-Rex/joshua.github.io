@@ -40,6 +40,7 @@ def _lerp(a, b, t):
 
 class ProceduralRenderer:
     def __init__(self, fps: int = 12, **_):
+        self.size = (W, H)
         self.fps = fps  # 12 fps = "on twos", klassischer Cartoon-Takt
 
     def frame(self, scene, t: float, beat_phase: float, energy: float) -> Image.Image:
