@@ -1,8 +1,8 @@
 """Storyboard: Lyrics + Beats -> Szenenliste. Optional per lokalem LLM (Ollama).
 
-Lyrics-Format: `[Abschnitt]`-Überschriften, eine Zeile pro Phrase. Optional kann eine Zeile
-mit `mm:ss ` beginnen, um die Zeit festzulegen; alle anderen werden proportional zur
-Textlänge über den Gesangsbereich verteilt.
+Lyrics-Format: `[Abschnitt]`-Überschriften, eine Zeile pro Phrase. Zeitmarken (Anker) sind
+möglich als `[Verse 2 @1:05]` oder als `mm:ss ` am Anfang einer Zeile. Zwischen den Ankern
+werden die Zeilen proportional zur Textlänge verteilt.
 """
 import json
 import re
@@ -62,16 +62,19 @@ def _pick(text: str, section: str, prev: str) -> str:
 
 def _parse(text: str):
     """-> Liste (abschnitt, zeile, feste_zeit|None)"""
-    out, section = [], ""
+    out, section, pending = [], "", None
     for raw in text.splitlines():
         line = raw.strip()
         if not line:
             continue
-        m = re.fullmatch(r"\[(.+)\]", line)
+        m = re.fullmatch(r"\[(.+?)(?:\s*@\s*(\d+):(\d\d(?:\.\d+)?))?\]", line)
         if m:
-            section = m.group(1)
+            section, pending = m.group(1), None
+            if m.group(2):
+                pending = int(m.group(2)) * 60 + float(m.group(3))
             continue
-        t = None
+        t = pending
+        pending = None
         m = re.match(r"(\d+):(\d\d(?:\.\d+)?)\s+(.*)", line)
         if m:
             t, line = int(m.group(1)) * 60 + float(m.group(2)), m.group(3)
@@ -95,12 +98,15 @@ def build(info: AudioInfo, lyrics: str, character: str, bars_per_scene: int = 4,
     for sec, line, _ in items:
         w.append(max(len(line), 14) + (14 if sec != prev_sec else 0))
         prev_sec = sec
-    cum = np.cumsum([0] + w) / sum(w)
-    starts = [vocal_start + (end - vocal_start) * c for c in cum[:-1]]
-    for i, (_, _, t) in enumerate(items):  # feste Zeiten überschreiben
+    cum = np.concatenate([[0], np.cumsum(w)]).astype(float)
+    # Anker: (Index, Zeit); Anfang und Ende des Gesangs sind immer Anker
+    anchors = {0: vocal_start, len(items): end}
+    for i, (_, _, t) in enumerate(items):
         if t is not None:
-            starts[i] = t
-    starts = [_snap(s, info.beats) if i else 0.0 for i, s in enumerate(starts)]
+            anchors[i] = t
+    keys = sorted(anchors)
+    starts = list(np.interp(cum[:-1], [cum[k] for k in keys], [anchors[k] for k in keys]))
+    starts = [_snap(s, info.beats) for s in starts]
     ends = starts[1:] + [info.duration]
 
     scenes, setting = [], "sunset_grid"
@@ -110,6 +116,8 @@ def build(info: AudioInfo, lyrics: str, character: str, bars_per_scene: int = 4,
             line = "*BAM!*"
         prompt = f"{STYLE}, {character}, {SETTINGS[setting]}"
         scenes.append(Scene(a, b, setting, prompt, line, sec))
+    if scenes[0].start > 0.5:  # Intro ohne Text
+        scenes.insert(0, Scene(0.0, scenes[0].start, "sunset_grid", f"{STYLE}, {character}, {SETTINGS['sunset_grid']}", ""))
     scenes = [s for s in scenes if s.start < info.duration]
     if llm:
         _refine_with_ollama(scenes, character, llm)
