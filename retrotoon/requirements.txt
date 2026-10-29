@@ -1,0 +1,7 @@
+numpy
+Pillow
+# Optional: lokale KI-Keyframes (Backend "diffusion", GPU empfohlen)
+# torch
+# diffusers
+# transformers
+# accelerate
