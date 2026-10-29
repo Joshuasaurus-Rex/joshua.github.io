@@ -30,7 +30,7 @@ def _split_lyrics(text: str) -> list[str]:
 def build(info: AudioInfo, lyrics: str, character: str, bars_per_scene: int = 4,
           llm: str | None = None) -> list[Scene]:
     beats_per_scene = bars_per_scene * 4
-    cuts = list(info.beats[::beats_per_scene]) + [info.duration]
+    cuts = [b for b in info.beats[::beats_per_scene] if b < info.duration] + [info.duration]
     if cuts[0] > 0.5:
         cuts.insert(0, 0.0)
     lines = _split_lyrics(lyrics)

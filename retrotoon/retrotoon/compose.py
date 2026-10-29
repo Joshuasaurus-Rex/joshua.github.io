@@ -18,7 +18,7 @@ def render(info: AudioInfo, scenes, renderer, audio_path: str, out: str, vhs: bo
            "-r", str(fps), "-i", "-", "-i", audio_path]
     if vhs:
         cmd += ["-vf", VHS]
-    cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out]
+    cmd += ["-c:v", "libx264", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out]
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     n = int(info.duration * fps)
     beats = info.beats
