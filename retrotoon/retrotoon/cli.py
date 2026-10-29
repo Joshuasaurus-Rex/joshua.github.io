@@ -18,6 +18,8 @@ def main():
     ap.add_argument("--lora", help="Optionales LoRA für den Stil")
     ap.add_argument("--llm", help="Ollama-Modell für Storyboard-Prompts, z.B. llama3.2")
     ap.add_argument("--bars", type=int, default=4, help="Takte pro Szene")
+    ap.add_argument("--vocal-start", type=float, default=0.0, help="Sekunde, an der der Gesang beginnt")
+    ap.add_argument("--vocal-end", type=float, help="Sekunde, an der der Gesang endet")
     ap.add_argument("--limit", type=float, help="Nur die ersten N Sekunden rendern")
     ap.add_argument("--no-vhs", action="store_true")
     a = ap.parse_args()
@@ -28,7 +30,7 @@ def main():
     print(f"Dauer {info.duration:.1f}s · {info.bpm:.0f} BPM · {len(info.beats)} Beats")
 
     lyrics = Path(a.lyrics).read_text() if a.lyrics else ""
-    scenes = storyboard.build(info, lyrics, a.character, a.bars, a.llm)
+    scenes = storyboard.build(info, lyrics, a.character, a.bars, a.llm, a.vocal_start, a.vocal_end)
     sb = Path(a.out).with_suffix(".storyboard.json")
     sb.write_text(json.dumps([asdict(s) for s in scenes], indent=2, ensure_ascii=False))
     print(f"{len(scenes)} Szenen -> {sb}")

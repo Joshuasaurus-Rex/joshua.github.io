@@ -4,9 +4,10 @@ import subprocess
 import numpy as np
 
 from .audio import AudioInfo
+from .render import caption
 
 VHS = ("scale=1280:720:flags=neighbor,"
-       "noise=alls=14:allf=t,"
+       "noise=alls=6:allf=t,"
        "eq=saturation=1.35:contrast=1.08,"
        "gblur=sigma=0.6,"
        "vignette=PI/5")
@@ -29,7 +30,7 @@ def render(info: AudioInfo, scenes, renderer, audio_path: str, out: str, vhs: bo
         period = beats[1] - beats[0] if len(beats) > 1 else 0.5
         phase = min(max((t - beats[k]) / period, 0.0), 1.0)
         e = float(info.energy[min(int(t / info.hop_s), len(info.energy) - 1)])
-        p.stdin.write(renderer.frame(scene, t, phase, e).tobytes())
+        p.stdin.write(caption(renderer.frame(scene, t, phase, e), scene.lyric).tobytes())
     p.stdin.close()
     if p.wait() != 0:
         raise RuntimeError("ffmpeg fehlgeschlagen")
